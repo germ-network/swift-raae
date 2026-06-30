@@ -1,0 +1,100 @@
+# Normative transcription — KDF layer (Stage 1)
+
+Transcribed from the vendored draft snapshot (see `SOURCE.md`, 2026-06-26). Section
+numbers refer to that snapshot and may drift. **This is the authority for the code, not
+the plan's prose** (the plan was written from a summary and had label errors — noted
+below).
+
+## Notation (§2.2)
+
+- `Nk` — AEAD key size (octets)
+- `Nn` — AEAD nonce size (octets)
+- `Nt` — AEAD tag size (octets)
+- `Nh` — KDF hash/PRF output size (octets)
+- `uint16(x)` / `uint32(x)` — big-endian fixed-width integer encodings.
+
+## Length-prefixed framing (§4.3)
+
+```
+frame(x):
+    if len(x) <= 0xFFFE:  return uint16(len(x)) || x
+    else:                 return uint16(0xFFFF) || LH(x)
+
+encode(x1, ..., xn) = frame(x1) || ... || frame(xn)
+```
+
+- Each field gets a **big-endian 2-octet length prefix**.
+- Over-large fields (> 65534 octets) use the escape length `0xFFFF` followed by an
+  `Nh`-octet digest `LH(x)` of the field. `LH` invokes the KDF's native primitive
+  directly with label `"raAE-LP-v1"`:
+  - two-step: `LH(x) = Extract(salt="raAE-LP-v1", ikm=x)` (Nh octets)
+  - one-step: `LH(x) = XOF("raAE-LP-v1" || x, Nh)`
+- Framing is therefore **parameterized by the KDF** (the over-large path needs the
+  hash). Our KDF supplies `LH`; `encode` takes it as a closure.
+
+## KDF(protocol_id, label, ikm, info, L) (§4.3)
+
+`ikm` and `info` are *lists* of byte strings; `...x` spreads each element as its own
+`encode` argument. `uint16(L)` is appended as a final field.
+
+```
+two-step (HKDF):
+  extract_input = encode(protocol_id, label, ...ikm)
+  prk           = Extract(salt=protocol_id, ikm=extract_input)
+  expand_info   = encode(protocol_id, label, ...info, uint16(L))
+  return          Expand(prk, expand_info, L)
+
+one-step (XOF):
+  M = encode(protocol_id, label, encode(...ikm), encode(...info), uint16(L))
+  return XOF(M, L)
+```
+
+## Constants / labels
+
+Protocol IDs (§4.10.2): immutable `"SEAL-RO-v1"`, mutable `"SEAL-RW-v1"`.
+
+Schedule labels (§4.4.3, Table 3) — **note plan said `snap_key`; spec says `acc_key`**:
+
+| Role        | Label          |
+|-------------|----------------|
+| Commitment  | `"commit"`     |
+| Payload key | `"payload_key"`|
+| Snapshot/acc key | `"acc_key"` |
+| Nonce base  | `"nonce_base"` |
+| Epoch key   | `"epoch_key"`  |
+
+Masked multiset hash labels (§4.7.4): `"acc_contrib"`, `"snapshot_tag"`,
+`"snapshot_mask"`.
+
+Labels + protocol IDs are ASCII bytes; within `encode` they are `frame()`d like any
+other field (no separate extra prefix).
+
+## Suite registry
+
+`aead_id` (Table 7), `kdf_id` (Table 8) are `uint16`. Known ids:
+- AEAD: `0x0001` AES-128-GCM, `0x0002` AES-256-GCM, `0x0003` ChaCha20-Poly1305,
+  `0x0010` AEGIS-128L, `0x0011` AEGIS-256 (+ AES-256-GCM-SIV for MRAE).
+  For all Table-7 AEADs: `C_i = ct_i || tag_i`, tag is the final `Nt` octets.
+- KDF: `0x0001` HKDF-SHA-256, `0x0002` HKDF-SHA-512, `0x0013` TurboSHAKE-256.
+- `snap_id` (Table 9): `0x0000` none, `0x0001` masked multiset hash.
+- `nonce_mode` (Table 10): `0x00` random, `0x01` derived.
+
+Stage-1 sizes: AES-256-GCM `Nk=32 Nn=12 Nt=16`; ChaCha20-Poly1305 `Nk=32 Nn=12 Nt=16`;
+HKDF-SHA-256 `Nh=32`; HKDF-SHA-512 `Nh=64`.
+
+## payload_info wire layout (§4 / Table refs)
+
+```
+payload_info = [ aead_id(uint16) | segment_max(uint32) | kdf_id(uint16) |
+                 snap_id(uint16) | nonce_mode(uint8) | epoch_length(uint8) |
+                 salt(32 octets) ]
+```
+The KDF applies `frame` to each element of this list when it is used as a KDF input.
+`segment_max` is a power of two ≥ 4096; `epoch_length` is `r ∈ [0,63]`.
+
+## Stage-1 scope
+
+Two-step HKDF KDFs + AES-256-GCM / ChaCha20-Poly1305 AEADs via swift-crypto, framing,
+and the suite registry. One-step XOF (TurboSHAKE) and AEGIS land in Stage 4. KDF
+correctness is fully pinned only in Stage 2 against the Appendix E commitment vector;
+Stage 1 tests cover framing, HKDF determinism/structure, and AEAD round-trips.
