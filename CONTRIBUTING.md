@@ -31,3 +31,8 @@ We also use the [periphery static analyzer](https://github.com/peripheryapp/peri
 ## Changesets
 We use [Changesets](https://github.com/changesets/changesets) to document changes and releases.
 Please [generate a changeset](https://github.com/changesets/changesets/blob/main/docs/adding-a-changeset.md) for your pull requests.
+
+> **Note on distribution.** This is a SwiftPM package, consumed via **git tags**, not
+> npm. The changesets workflow here is used only to maintain the changelog and to cut
+> a **GitHub release + version tag**; `changeset publish` does not publish anything to
+> an npm registry. Downstream consumers depend on the git tag in their `Package.swift`.
