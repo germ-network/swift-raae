@@ -134,4 +134,34 @@ struct UsageLimitsTests {
 			plaintext: [1], nonce: nonce)
 		#expect(enc.count(epochIndex: 0) == 101)
 	}
+
+	/// Regression for the review's HIGH finding: the per-segment (MRAE hot-rewrite) cap
+	/// must survive a freeze/resume, which requires reading back `segmentRewrites`.
+	@Test func perSegmentCapSurvivesFreezeResume() throws {
+		// Derived GCM-SIV, segmentMax 4096 ⇒ log2(L)=8; advantageLog2 108 ⇒ perSegmentLog2 = 2
+		// (limit 4) while the epoch budget (perEpochKeyLog2 10) stays out of the way.
+		let sched = try schedule(aeadID: 0x001F, nonceMode: .derived, segmentMax: 4096)
+		let enc1 = PayloadEncryptor(schedule: sched, policy: .enforce, advantageLog2: 108)
+		#expect(enc1.budget.perSegmentLog2 == 2)
+		let pos = SegmentPosition(index: 0, isFinal: false)
+		for _ in 0..<3 {
+			_ = try enc1.encryptDerived(
+				position: pos, associatedData: [], plaintext: [1])
+		}
+		#expect(enc1.segmentRewriteCounts[0] == 3)
+
+		// Freeze → resume into a fresh encryptor via the full persistable state.
+		let state = enc1.persistableState
+		let enc2 = PayloadEncryptor(schedule: sched, policy: .enforce, advantageLog2: 108)
+		enc2.seed(epochCounts: state.epochCounts, segmentRewrites: state.segmentRewrites)
+
+		// The 4th rewrite (cumulative == limit 4) is allowed; the 5th exceeds and throws —
+		// proving the cap was NOT reset to zero on resume.
+		_ = try enc2.encryptDerived(position: pos, associatedData: [], plaintext: [1])
+		#expect(enc2.segmentRewriteCounts[0] == 4)
+		#expect(throws: BudgetError.self) {
+			_ = try enc2.encryptDerived(
+				position: pos, associatedData: [], plaintext: [1])
+		}
+	}
 }

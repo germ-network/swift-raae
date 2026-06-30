@@ -7,7 +7,9 @@ import Foundation
 /// The derived **secret** keys (`payloadKey`, `snapKey`, `nonceBase`, and per-segment
 /// keys) are deliberately *not* on the public surface — the draft (§5.8) treats them as
 /// never exposed through any public API — and are held as zeroizing `SymmetricKey`
-/// values so they are scrubbed when the schedule is released. The `commitment` is a
+/// values so they are scrubbed when the *last reference* to the key is released (so on a
+/// `startDecrypt` mismatch, dropping the rejected schedule satisfies the §4.6 SHOULD to
+/// zeroize derived key material — callers must not retain it). The `commitment` is a
 /// public authenticator, not a secret.
 public struct PayloadSchedule {
 	public let protocolID: [UInt8]
@@ -54,6 +56,11 @@ public struct PayloadSchedule {
 
 	/// Derive the schedule from a 32-octet CEK and the message's `payload_info`.
 	///
+	/// - Important: this initializer does **not** verify a commitment. A decrypt-side caller
+	///   MUST obtain the schedule via ``startDecrypt(protocolID:cek:payloadInfo:publishedCommitment:expectedCommitmentLength:)``
+	///   (or call ``verifyCommitment(_:)``) before decrypting any segment — the commitment is
+	///   SEAL's only key/parameter-committing defense (§4.6), and AES-GCM / ChaCha20-Poly1305
+	///   are not key-committing on their own.
 	/// - Parameter commitmentLength: defaults to the KDF's `Nh`; must be ≥ 16.
 	public init(
 		protocolID: [UInt8],
@@ -123,12 +130,19 @@ public struct PayloadSchedule {
 
 	/// raAE `StartDec` (§3.2 / §4.1 Table 1): re-derive the schedule from `(CEK,
 	/// payload_info)` and verify the published commitment **before** any segment can be
-	/// decrypted, so the safe path is the default. Returns the schedule only if the
-	/// commitment matches.
+	/// decrypted. This is the recommended safe path — verification is enforced by
+	/// convention (a documented MUST), not by the type system, since the public `init` can
+	/// still build an unverified schedule. Returns the schedule only if the commitment
+	/// matches.
 	///
 	/// The commitment length is taken from `publishedCommitment` (callers must store the
 	/// full `commitment_length`-octet value). A short value (< 16 octets) is rejected by
-	/// `init` with ``ScheduleError/commitmentTooShort(_:)``.
+	/// `init` with ``ScheduleError/commitmentTooShort(_:)``. Truncation cannot silently
+	/// downgrade the binding: the output length is bound into the KDF, so a truncated
+	/// commitment re-derives to a different value and fails as `commitmentMismatch`. A caller
+	/// who knows the authored `commitment_length` out of band may pass
+	/// `expectedCommitmentLength` to get a precise
+	/// ``CommitmentError/commitmentLengthMismatch(expected:got:)`` instead.
 	///
 	/// - Note: the message nonce `N` and global associated data `G` of the abstract
 	///   `StartDec` are not yet parameters — SEAL defines no `G`, and there is no header
@@ -138,8 +152,13 @@ public struct PayloadSchedule {
 		protocolID: [UInt8],
 		cek: [UInt8],
 		payloadInfo: PayloadInfo,
-		publishedCommitment: [UInt8]
+		publishedCommitment: [UInt8],
+		expectedCommitmentLength: Int? = nil
 	) throws -> PayloadSchedule {
+		if let expected = expectedCommitmentLength, expected != publishedCommitment.count {
+			throw CommitmentError.commitmentLengthMismatch(
+				expected: expected, got: publishedCommitment.count)
+		}
 		let schedule = try PayloadSchedule(
 			protocolID: protocolID, cek: cek, payloadInfo: payloadInfo,
 			commitmentLength: publishedCommitment.count)

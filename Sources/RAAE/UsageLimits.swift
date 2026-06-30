@@ -39,9 +39,10 @@ extension PayloadSchedule {
 			// §5.9.7.4: 128-bit synthetic-IV birthday over distinct nonces per epoch key,
 			// and a hot-segment data-volume cap reduced by the per-segment block count L.
 			let birthdayLog2 = max(0, (128 - advantageLog2) / 2)
-			// blocks/segment L is a power of two ≥ 256, so log2(L) = trailingZeroBitCount.
-			let blocksPerSegment = Int(payloadInfo.segmentMax) / 16
-			let log2L = blocksPerSegment.trailingZeroBitCount
+			// segmentMax is a validated power of two ≥ 4096, so blocks/segment = segmentMax/16
+			// and log2(blocks/segment) = log2(segmentMax) − 4 = trailingZeroBitCount − 4. This
+			// avoids an Int(UInt32) conversion (which could trap on a 32-bit target).
+			let log2L = payloadInfo.segmentMax.trailingZeroBitCount - 4
 			return UsageBudget(
 				perEpochKeyLog2: birthdayLog2,
 				perSegmentLog2: max(0, birthdayLog2 - log2L),
@@ -58,7 +59,8 @@ public enum BudgetPolicy: Sendable {
 	case enforce
 }
 
-/// Emitted (under both policies) when an encryption reaches or passes a budget.
+/// Emitted (under both policies) when an encryption *exceeds* a budget (the count strictly
+/// passes `2^limitLog2`; the boundary encryption at exactly the limit is permitted).
 public struct BudgetEvent: Sendable, Equatable {
 	public enum Kind: Sendable, Equatable { case epochKey, segment }
 	public let kind: Kind
@@ -79,15 +81,21 @@ public enum BudgetError: Error, Equatable {
 /// `Segment` statics. This is how the §5.9.5 MUST is satisfied for a single live writer.
 ///
 /// - Important: accounting is in-memory and per-instance. A persisted/resumed object must
-///   `seed(...)` the prior counts; durability across processes is the host's
-///   responsibility (§5.9.5). Decryption is intentionally not metered — the forgery bound
-///   (§5.9.7.3) is a decrypt-side property an online reader cannot self-limit. This class
-///   is a mutable reference type and is **not** `Sendable`; serialize external access.
+///   round-trip the full counter state through ``persistableState`` → ``seed(epochCounts:segmentRewrites:)``;
+///   durability across processes is the host's responsibility (§5.9.5). Decryption is
+///   intentionally not metered — the forgery bound (§5.9.7.3) is a decrypt-side property an
+///   online reader cannot self-limit. The ``UsageBudget/maxEpochKeysLog2`` ceiling (§5.9.6)
+///   is **advisory and not enforced** here. This class is a mutable reference type and is
+///   **not** `Sendable`; serialize external access.
+///
+/// - Note: in derived mode the per-segment counter (``segmentRewriteCounts``) grows to one
+///   entry per distinct written segment index — `O(number of segments)` memory for a
+///   long-lived writer.
 public final class PayloadEncryptor {
 	public let schedule: PayloadSchedule
 	public let budget: UsageBudget
 	public var policy: BudgetPolicy
-	/// Called whenever an encryption reaches/passes a budget, under both policies.
+	/// Called whenever an encryption *exceeds* a budget, under both policies.
 	public var onBudgetEvent: ((BudgetEvent) -> Void)?
 
 	private var epochCounts: [UInt64: UInt64] = [:]
@@ -123,10 +131,23 @@ public final class PayloadEncryptor {
 			plaintext: plaintext)
 	}
 
-	/// Current encryption count for an epoch key (for persistence / inspection).
+	/// Current encryption count for an epoch key (for inspection).
 	public func count(epochIndex: UInt64) -> UInt64 { epochCounts[epochIndex] ?? 0 }
 
+	/// The complete counter state, for persisting across a freeze (§5.9.5). Round-trips
+	/// through ``seed(epochCounts:segmentRewrites:)`` — restoring **both** maps is required,
+	/// or the per-segment rewrite cap silently resets on resume.
+	public var persistableState:
+		(epochCounts: [UInt64: UInt64], segmentRewrites: [UInt64: UInt64])
+	{
+		(epochCounts, segmentRewrites)
+	}
+
+	/// Snapshot of the per-segment rewrite counts (derived mode). Pairs with `seed(...)`.
+	public var segmentRewriteCounts: [UInt64: UInt64] { segmentRewrites }
+
 	/// Seed counts for a resumed object so accounting continues across a freeze (§5.9.5).
+	/// Pass the full ``persistableState`` — both maps — to preserve the per-segment cap.
 	public func seed(epochCounts: [UInt64: UInt64], segmentRewrites: [UInt64: UInt64] = [:]) {
 		self.epochCounts = epochCounts
 		self.segmentRewrites = segmentRewrites

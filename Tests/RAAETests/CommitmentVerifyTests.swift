@@ -56,8 +56,8 @@ struct CommitmentVerifyTests {
 	}
 
 	@Test func startDecryptRejectsFlippedLastCommitmentByte() throws {
-		var (cek, info, commitment, _) = try e1()
-		_ = cek
+		let (cek, info, base, _) = try e1()
+		var commitment = base
 		// Flip the LAST byte to exercise the non-early-exit constant-time compare.
 		commitment[commitment.count - 1] ^= 0x01
 		#expect(throws: PayloadSchedule.CommitmentError.commitmentMismatch) {
@@ -68,8 +68,8 @@ struct CommitmentVerifyTests {
 	}
 
 	@Test func startDecryptRejectsMutatedPayloadInfo() throws {
-		var (cek, info, commitment, _) = try e1()
-		_ = cek
+		let (cek, base, commitment, _) = try e1()
+		var info = base
 		info.segmentMax = 65536  // valid pow2 ≥4096, but not what the commitment covers
 		#expect(throws: PayloadSchedule.CommitmentError.commitmentMismatch) {
 			_ = try PayloadSchedule.startDecrypt(
