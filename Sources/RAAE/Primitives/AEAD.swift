@@ -42,6 +42,46 @@ extension AEAD {
 	}
 }
 
+/// AES-128-GCM, `aead_id = 0x0001` (Table 7). `Nk=16, Nn=12, Nt=16`.
+struct AES128GCM: AEAD {
+	let id: UInt16 = 0x0001
+	let keyLength = 16
+	let nonceLength = 12
+	let tagLength = 16
+
+	func seal(key: [UInt8], nonce: [UInt8], aad: [UInt8], plaintext: [UInt8]) throws -> [UInt8]
+	{
+		try validate(key: key, nonce: nonce)
+		let box = try AES.GCM.seal(
+			plaintext,
+			using: SymmetricKey(data: key),
+			nonce: try AES.GCM.Nonce(data: nonce),
+			authenticating: aad
+		)
+		return Array(box.ciphertext) + Array(box.tag)
+	}
+
+	func open(key: [UInt8], nonce: [UInt8], aad: [UInt8], ciphertext: [UInt8]) throws -> [UInt8]
+	{
+		try validate(key: key, nonce: nonce)
+		guard ciphertext.count >= tagLength else {
+			throw AEADError.invalidParameters(
+				"ciphertext shorter than tag (\(tagLength) octets)")
+		}
+		let ct = Array(ciphertext.prefix(ciphertext.count - tagLength))
+		let tag = Array(ciphertext.suffix(tagLength))
+		do {
+			let box = try AES.GCM.SealedBox(
+				nonce: try AES.GCM.Nonce(data: nonce), ciphertext: ct, tag: tag)
+			return Array(
+				try AES.GCM.open(
+					box, using: SymmetricKey(data: key), authenticating: aad))
+		} catch {
+			throw AEADError.authenticationFailure
+		}
+	}
+}
+
 /// AES-256-GCM, `aead_id = 0x0002` (Table 7). `Nk=32, Nn=12, Nt=16`.
 struct AES256GCM: AEAD {
 	let id: UInt16 = 0x0002
@@ -85,9 +125,10 @@ struct AES256GCM: AEAD {
 	}
 }
 
-/// ChaCha20-Poly1305, `aead_id = 0x0003` (Table 7). `Nk=32, Nn=12, Nt=16`.
+/// ChaCha20-Poly1305, `aead_id = 0x001D` (Table 7, IANA `AEAD_CHACHA20_POLY1305`).
+/// `Nk=32, Nn=12, Nt=16`.
 struct ChaCha20Poly1305: AEAD {
-	let id: UInt16 = 0x0003
+	let id: UInt16 = 0x001D
 	let keyLength = 32
 	let nonceLength = 12
 	let tagLength = 16

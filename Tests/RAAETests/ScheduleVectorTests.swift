@@ -8,23 +8,7 @@ struct ScheduleVectorTests {
 	/// Build the E.1 schedule from the vendored vector.
 	func loadE1() throws -> (schedule: PayloadSchedule, json: [String: Any]) {
 		let v = try Vectors.load("E1")
-		let pi = v["payload_info"] as! [String: Any]
-		let info = PayloadInfo(
-			aeadID: UInt16(pi["aead_id"] as! Int),
-			segmentMax: UInt32(pi["segment_max"] as! Int),
-			kdfID: UInt16(pi["kdf_id"] as! Int),
-			snapID: UInt16(pi["snap_id"] as! Int),
-			nonceMode: PayloadInfo.NonceMode(
-				rawValue: UInt8(pi["nonce_mode"] as! Int))!,
-			epochLength: UInt8(pi["epoch_length"] as! Int),
-			salt: Hex.decode(pi["salt_hex"] as! String)
-		)
-		let schedule = try PayloadSchedule(
-			protocolID: ProtocolID.mutable,
-			cek: Hex.decode(v["cek_hex"] as! String),
-			payloadInfo: info
-		)
-		return (schedule, v)
+		return (try Vectors.schedule(from: v), v)
 	}
 
 	@Test func scheduleMatchesVector() throws {

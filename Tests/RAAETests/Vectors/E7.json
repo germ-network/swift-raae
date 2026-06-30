@@ -1,0 +1,38 @@
+{
+	"name": "E.7 Two Segment, AES-256-GCM, HKDF-SHA-256, 16384",
+	"source": "draft-sullivan-cfrg-raae Appendix E.7 (2026-06-26 snapshot)",
+	"protocol_id": "SEAL-RW-v1",
+	"cek_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	"payload_info": {
+		"aead_id": 2,
+		"segment_max": 16384,
+		"kdf_id": 1,
+		"snap_id": 1,
+		"nonce_mode": 0,
+		"epoch_length": 1,
+		"salt_hex": "0404040404040404040404040404040404040404040404040404040404040404"
+	},
+	"schedule": {
+		"commitment_hex": "020e115b0a3b342a2d52ee0934594b1ea5bc837b651d9c5b8dfcce276489b973",
+		"payload_key_hex": "c1f2663e99977428dc0fec1566ce15e91398634ab9b1d004945de48560707062",
+		"acc_key_hex": "bc314ecaa8ff6c1c4ebc13b54597a10d2bcf412b40c428a0e411a828fcfb52ef"
+	},
+	"segments": [
+		{
+			"index": 0,
+			"is_final": 0,
+			"nonce_hex": "030303030303030303030303",
+			"segment_aad_hex": "00095345414c2d4441544100080000000000000000000100",
+			"ciphertext_hex": "6a2b84e72ce8edbf4259eebd",
+			"tag_hex": "1574936244d54aedf589c87002dbac90"
+		},
+		{
+			"index": 1,
+			"is_final": 1,
+			"nonce_hex": "070707070707070707070707",
+			"segment_aad_hex": "00095345414c2d4441544100080000000000000001000101",
+			"ciphertext_hex": "50b0eda5d7a86a5a94e501f3170201736d755d56",
+			"tag_hex": "f22fb2b4bfed679d1d90d2a0814e429c"
+		}
+	]
+}
