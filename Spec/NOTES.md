@@ -185,6 +185,21 @@ vector's fixed nonce to pin the ciphertext in both directions.
   AES-256-GCM-SIV). A rewrite reuses a segment's fixed nonce, so non-MRAE there is unsafe.
   (Write-once profiles could relax this later behind an explicit opt-in.)
 - **CEK length is fixed at 32 octets** and validated in `PayloadSchedule.init`.
+- **Verify-before-decrypt is the default path** (§4.6, §4.9.1.2): `PayloadSchedule.startDecrypt(...)`
+  re-derives at the published commitment length and constant-time-verifies it before
+  returning a schedule; `verifyCommitment(_:)` is the standalone check. A mismatch throws
+  `CommitmentError.commitmentMismatch` and the caller MUST abandon decryption.
+- **Derived keys are not on the public API** (§5.8): `payloadKey`/`snapKey`/`nonceBase`
+  and per-segment keys are internal and held as zeroizing `SymmetricKey` (scrubbed on
+  `deinit`). `AEAD.seal/open` take `SymmetricKey`. Honest limit: the KDF framing still
+  materializes secret ikm in a transient `[UInt8]`, and the caller-owned CEK and any
+  register/stack copies are not scrubbable — we bound the *long-lived* secret to one
+  zeroizing buffer, not zero copies.
+- **Usage budgets (§5.9)** are exposed via `PayloadSchedule.usageBudget(...)` (log2
+  bounds) and enforced opt-in by `PayloadEncryptor` (warn/enforce), which meters
+  per-epoch-key (and, derived, per-segment) encryptions and delegates to the byte-exact
+  `Segment` statics. Cross-process accounting (seed/persist) and the decrypt-side forgery
+  bound are the host's responsibility.
 
 ## Stage-1 scope
 

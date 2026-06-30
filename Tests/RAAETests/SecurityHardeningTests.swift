@@ -63,9 +63,15 @@ struct SecurityHardeningTests {
 	}
 
 	@Test func derivedModeWithMRAEIsAccepted() throws {
-		// AES-256-GCM-SIV (0x001F) is MRAE ⇒ allowed.
+		// AES-256-GCM-SIV (0x001F) is MRAE ⇒ allowed. Confirm via a public derived
+		// round-trip (nonceBase is now internal and not peeked at).
 		let schedule = try makeSchedule(aeadID: 0x001F, nonceMode: .derived)
-		#expect(schedule.nonceBase != nil)
+		let pos = SegmentPosition(index: 0, isFinal: false)
+		let ct = try Segment.encryptDerived(
+			schedule: schedule, position: pos, associatedData: [], plaintext: [1, 2, 3])
+		let back = try Segment.decryptDerived(
+			schedule: schedule, position: pos, associatedData: [], ciphertext: ct)
+		#expect(back == [1, 2, 3])
 		// Random mode is unaffected for the same non-MRAE suite.
 		_ = try makeSchedule(aeadID: 0x0002, nonceMode: .random)
 	}

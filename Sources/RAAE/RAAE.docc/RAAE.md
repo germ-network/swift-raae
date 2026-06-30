@@ -59,6 +59,17 @@ let snapshot = hash.snapshotValue(
 - ``Segment``
 - ``SegmentPosition``
 
+### Safe decryption
+
+- ``PayloadSchedule/startDecrypt(protocolID:cek:payloadInfo:publishedCommitment:)``
+- ``PayloadSchedule/verifyCommitment(_:)``
+
+### Usage limits
+
+- ``UsageBudget``
+- ``PayloadEncryptor``
+- ``BudgetPolicy``
+
 ### Snapshot authenticator
 
 - ``MaskedMultisetHash``

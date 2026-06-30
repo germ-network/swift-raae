@@ -17,7 +17,8 @@ public protocol KeyDerivation: Sendable {
 	/// `LH(x)` — the over-large-field digest used by framing (§4.3), label `"raAE-LP-v1"`.
 	func longHash(_ field: [UInt8]) -> [UInt8]
 
-	/// `KDF(protocol_id, label, ikm, info, L)` (§4.3).
+	/// `KDF(protocol_id, label, ikm, info, L)` (§4.3), returning raw octets. Use this for
+	/// **non-secret** outputs (commitment, snapshot contributions/tags/masks, `longHash`).
 	func derive(
 		protocolID: [UInt8],
 		label: [UInt8],
@@ -25,6 +26,21 @@ public protocol KeyDerivation: Sendable {
 		info: [[UInt8]],
 		outputLength: Int
 	) -> [UInt8]
+
+	/// Same derivation as ``derive(protocolID:label:ikm:info:outputLength:)`` but returns a
+	/// zeroizing `SymmetricKey`. Use this for **secret** outputs (payload/epoch/snapshot
+	/// keys, nonce base) so the long-lived copy is scrubbed on `deinit`.
+	///
+	/// - Note: the framing step still materializes the secret `ikm` in a transient
+	///   `[UInt8]` buffer (`extract_input`), which Swift cannot scrub; this only bounds the
+	///   *long-lived* secret to one zeroizing buffer.
+	func deriveKey(
+		protocolID: [UInt8],
+		label: [UInt8],
+		ikm: [[UInt8]],
+		info: [[UInt8]],
+		outputLength: Int
+	) -> SymmetricKey
 }
 
 extension KeyDerivation {
@@ -59,6 +75,33 @@ struct HKDFKeyDerivation<H: HashFunction>: KeyDerivation {
 		info: [[UInt8]],
 		outputLength: Int
 	) -> [UInt8] {
+		expandKey(
+			protocolID: protocolID, label: label, ikm: ikm, info: info,
+			outputLength: outputLength
+		)
+		.withUnsafeBytes { Array($0) }
+	}
+
+	func deriveKey(
+		protocolID: [UInt8],
+		label: [UInt8],
+		ikm: [[UInt8]],
+		info: [[UInt8]],
+		outputLength: Int
+	) -> SymmetricKey {
+		expandKey(
+			protocolID: protocolID, label: label, ikm: ikm, info: info,
+			outputLength: outputLength)
+	}
+
+	/// Shared HKDF Extract→Expand, returning the `SymmetricKey` directly (no `[UInt8]` copy).
+	private func expandKey(
+		protocolID: [UInt8],
+		label: [UInt8],
+		ikm: [[UInt8]],
+		info: [[UInt8]],
+		outputLength: Int
+	) -> SymmetricKey {
 		// extract_input = encode(protocol_id, label, ...ikm)
 		let extractInput = encode([protocolID, label] + ikm)
 		// prk = Extract(salt=protocol_id, ikm=extract_input)
@@ -69,12 +112,11 @@ struct HKDFKeyDerivation<H: HashFunction>: KeyDerivation {
 		// expand_info = encode(protocol_id, label, ...info, uint16(L))
 		let expandInfo = encode([protocolID, label] + info + [Bytes.uint16(outputLength)])
 		// return Expand(prk, expand_info, L)
-		let okm = HKDF<H>.expand(
+		return HKDF<H>.expand(
 			pseudoRandomKey: prk,
 			info: expandInfo,
 			outputByteCount: outputLength
 		)
-		return okm.withUnsafeBytes { Array($0) }
 	}
 }
 

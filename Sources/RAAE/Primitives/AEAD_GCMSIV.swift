@@ -16,11 +16,12 @@ struct AES256GCMSIV: AEAD {
 	let tagLength = 16
 	let isMRAE = true
 
-	func seal(key: [UInt8], nonce: [UInt8], aad: [UInt8], plaintext: [UInt8]) throws -> [UInt8]
+	func seal(key: SymmetricKey, nonce: [UInt8], aad: [UInt8], plaintext: [UInt8]) throws
+		-> [UInt8]
 	{
-		guard key.count == keyLength else {
+		guard key.bitCount == keyLength * 8 else {
 			throw AEADError.invalidParameters(
-				"key must be \(keyLength) octets, got \(key.count)")
+				"key must be \(keyLength) octets, got \(key.bitCount / 8)")
 		}
 		guard nonce.count == nonceLength else {
 			throw AEADError.invalidParameters(
@@ -28,18 +29,19 @@ struct AES256GCMSIV: AEAD {
 		}
 		let box = try AES.GCM._SIV.seal(
 			plaintext,
-			using: SymmetricKey(data: key),
+			using: key,
 			nonce: try AES.GCM._SIV.Nonce(data: nonce),
 			authenticating: aad
 		)
 		return Array(box.ciphertext) + Array(box.tag)
 	}
 
-	func open(key: [UInt8], nonce: [UInt8], aad: [UInt8], ciphertext: [UInt8]) throws -> [UInt8]
+	func open(key: SymmetricKey, nonce: [UInt8], aad: [UInt8], ciphertext: [UInt8]) throws
+		-> [UInt8]
 	{
-		guard key.count == keyLength else {
+		guard key.bitCount == keyLength * 8 else {
 			throw AEADError.invalidParameters(
-				"key must be \(keyLength) octets, got \(key.count)")
+				"key must be \(keyLength) octets, got \(key.bitCount / 8)")
 		}
 		guard nonce.count == nonceLength else {
 			throw AEADError.invalidParameters(
@@ -57,7 +59,7 @@ struct AES256GCMSIV: AEAD {
 			)
 			return Array(
 				try AES.GCM._SIV.open(
-					box, using: SymmetricKey(data: key), authenticating: aad))
+					box, using: key, authenticating: aad))
 		} catch {
 			throw AEADError.authenticationFailure
 		}

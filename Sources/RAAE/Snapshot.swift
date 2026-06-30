@@ -1,3 +1,4 @@
+import Crypto
 import Foundation
 
 /// Constant-time byte comparison for authenticators (commitment, snapshot).
@@ -23,7 +24,9 @@ public enum ConstantTime {
 public struct MaskedMultisetHash {
 	public let protocolID: [UInt8]
 	public let kdf: KeyDerivation
-	public let snapKey: [UInt8]
+	/// Snapshot key (`acc_key`). Internal + zeroizing; the draft (§5.8) keeps it off any
+	/// public API.
+	let snapKey: SymmetricKey
 
 	/// `Nh` — the accumulator/tag/mask width.
 	public var outputSize: Int { kdf.outputSize }
@@ -34,17 +37,22 @@ public struct MaskedMultisetHash {
 		self.snapKey = schedule.snapKey
 	}
 
-	public init(protocolID: [UInt8], kdf: KeyDerivation, snapKey: [UInt8]) {
+	init(protocolID: [UInt8], kdf: KeyDerivation, snapKey: SymmetricKey) {
 		self.protocolID = protocolID
 		self.kdf = kdf
 		self.snapKey = snapKey
 	}
 
+	/// The (secret) snap_key as a transient `[UInt8]` ikm for framing. See the note on
+	/// ``KeyDerivation/deriveKey(protocolID:label:ikm:info:outputLength:)``.
+	private var snapKeyBytes: [UInt8] { snapKey.withUnsafeBytes { Array($0) } }
+
 	/// `contrib(i) = KDF(protocol_id, "acc_contrib", [snap_key], [uint64(i), tag(i)], Nh)`.
 	public func contribution(index: UInt64, tag: [UInt8]) -> [UInt8] {
 		kdf.derive(
 			protocolID: protocolID, label: Label.accContrib,
-			ikm: [snapKey], info: [Bytes.uint64(index), tag], outputLength: outputSize)
+			ikm: [snapKeyBytes], info: [Bytes.uint64(index), tag],
+			outputLength: outputSize)
 	}
 
 	/// `acc = XOR of contrib(i)` over the supplied segments (order-independent).
@@ -60,7 +68,7 @@ public struct MaskedMultisetHash {
 	public func snapshotTag(segmentCount: UInt64, accumulator: [UInt8]) -> [UInt8] {
 		kdf.derive(
 			protocolID: protocolID, label: Label.snapshotTag,
-			ikm: [snapKey], info: [Bytes.uint64(segmentCount), accumulator],
+			ikm: [snapKeyBytes], info: [Bytes.uint64(segmentCount), accumulator],
 			outputLength: outputSize)
 	}
 
@@ -68,7 +76,7 @@ public struct MaskedMultisetHash {
 	public func mask(segmentCount: UInt64, snapshotTag: [UInt8]) -> [UInt8] {
 		kdf.derive(
 			protocolID: protocolID, label: Label.snapshotMask,
-			ikm: [snapKey], info: [Bytes.uint64(segmentCount), snapshotTag],
+			ikm: [snapKeyBytes], info: [Bytes.uint64(segmentCount), snapshotTag],
 			outputLength: outputSize)
 	}
 

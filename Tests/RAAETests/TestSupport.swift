@@ -1,6 +1,13 @@
+import Crypto
 import Foundation
 
 @testable import RAAE
+
+/// Read the raw bytes of a `SymmetricKey` (test-only; production keeps keys opaque).
+func keyBytes(_ key: SymmetricKey) -> [UInt8] { key.withUnsafeBytes { Array($0) } }
+
+/// Hex of a `SymmetricKey`'s bytes.
+func keyHex(_ key: SymmetricKey) -> String { Hex.encode(keyBytes(key)) }
 
 enum Hex {
 	/// Decode a hex string to bytes. Traps on malformed input (test-only).

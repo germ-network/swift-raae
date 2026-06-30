@@ -1,3 +1,4 @@
+import Crypto
 import Testing
 
 @testable import RAAE
@@ -12,7 +13,7 @@ struct AEADTests {
 	@Test(arguments: suites)
 	func roundTripAndLayout(_ named: (String, any AEAD)) throws {
 		let aead = named.1
-		let key = [UInt8](repeating: 0x07, count: aead.keyLength)
+		let key = SymmetricKey(data: [UInt8](repeating: 0x07, count: aead.keyLength))
 		let nonce = [UInt8](repeating: 0x09, count: aead.nonceLength)
 		let aad: [UInt8] = [0xA0, 0xB1]
 		let plaintext = Array("hello, segment".utf8)
@@ -30,7 +31,7 @@ struct AEADTests {
 	@Test(arguments: suites)
 	func tamperedTagFails(_ named: (String, any AEAD)) throws {
 		let aead = named.1
-		let key = [UInt8](repeating: 0x07, count: aead.keyLength)
+		let key = SymmetricKey(data: [UInt8](repeating: 0x07, count: aead.keyLength))
 		let nonce = [UInt8](repeating: 0x09, count: aead.nonceLength)
 		var ciphertext = try aead.seal(
 			key: key, nonce: nonce, aad: [], plaintext: [1, 2, 3])
@@ -43,7 +44,7 @@ struct AEADTests {
 	@Test(arguments: suites)
 	func wrongAADFails(_ named: (String, any AEAD)) throws {
 		let aead = named.1
-		let key = [UInt8](repeating: 0x07, count: aead.keyLength)
+		let key = SymmetricKey(data: [UInt8](repeating: 0x07, count: aead.keyLength))
 		let nonce = [UInt8](repeating: 0x09, count: aead.nonceLength)
 		let ciphertext = try aead.seal(
 			key: key, nonce: nonce, aad: [0x01], plaintext: [1, 2, 3])
@@ -57,7 +58,9 @@ struct AEADTests {
 		let aead = named.1
 		let nonce = [UInt8](repeating: 0x09, count: aead.nonceLength)
 		#expect(throws: AEADError.self) {
-			try aead.seal(key: [0x01], nonce: nonce, aad: [], plaintext: [1])
+			try aead.seal(
+				key: SymmetricKey(data: [0x01]), nonce: nonce, aad: [],
+				plaintext: [1])
 		}
 	}
 }
