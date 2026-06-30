@@ -78,8 +78,11 @@ struct HKDFKeyDerivation<H: HashFunction>: KeyDerivation {
 	}
 }
 
-/// HKDF-SHA-256, `kdf_id = 0x0001` (Table 8).
+/// HKDF-SHA-256, `kdf_id = 0x0001`, `Nh = 32` (Table 8).
 func makeHKDFSHA256() -> HKDFKeyDerivation<SHA256> { .init(id: 0x0001) }
 
-/// HKDF-SHA-512, `kdf_id = 0x0002` (Table 8).
-func makeHKDFSHA512() -> HKDFKeyDerivation<SHA512> { .init(id: 0x0002) }
+/// HKDF-SHA-384, `kdf_id = 0x0002`, `Nh = 48` (Table 8).
+func makeHKDFSHA384() -> HKDFKeyDerivation<SHA384> { .init(id: 0x0002) }
+
+/// HKDF-SHA-512, `kdf_id = 0x0003`, `Nh = 64` (Table 8).
+func makeHKDFSHA512() -> HKDFKeyDerivation<SHA512> { .init(id: 0x0003) }

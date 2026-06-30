@@ -8,8 +8,9 @@ enum SuiteRegistry {
 	/// Resolve an AEAD by `aead_id`, or `nil` if unsupported in this build.
 	static func aead(id: UInt16) -> AEAD? {
 		switch id {
+		case 0x0001: AES128GCM()
 		case 0x0002: AES256GCM()
-		case 0x0003: ChaCha20Poly1305()
+		case 0x001D: ChaCha20Poly1305()
 		default: nil
 		}
 	}
@@ -18,7 +19,8 @@ enum SuiteRegistry {
 	static func kdf(id: UInt16) -> KeyDerivation? {
 		switch id {
 		case 0x0001: makeHKDFSHA256()
-		case 0x0002: makeHKDFSHA512()
+		case 0x0002: makeHKDFSHA384()
+		case 0x0003: makeHKDFSHA512()
 		default: nil
 		}
 	}

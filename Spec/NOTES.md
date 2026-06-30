@@ -79,8 +79,25 @@ other field (no separate extra prefix).
 - `snap_id` (Table 9): `0x0000` none, `0x0001` masked multiset hash.
 - `nonce_mode` (Table 10): `0x00` random, `0x01` derived.
 
-Stage-1 sizes: AES-256-GCM `Nk=32 Nn=12 Nt=16`; ChaCha20-Poly1305 `Nk=32 Nn=12 Nt=16`;
-HKDF-SHA-256 `Nh=32`; HKDF-SHA-512 `Nh=64`.
+**Table 7 (AEAD) — verified IANA code points, NOT sequential:**
+| name | aead_id | Nk | Nn | default mode |
+|------|---------|----|----|--------------|
+| AES-128-GCM | `0x0001` | 16 | 12 | random |
+| AES-256-GCM | `0x0002` | 32 | 12 | random |
+| ChaCha20-Poly1305 | `0x001D` | 32 | 12 | random |
+| AES-256-GCM-SIV | `0x001F` | 32 | 12 | derived |
+| AEGIS-256 | `0x0021` | 32 | 32 | random |
+
+**Table 8 (KDF):** `0x0001` HKDF-SHA-256 (Nh 32), `0x0002` HKDF-SHA-**384** (Nh 48),
+`0x0003` HKDF-SHA-512 (Nh 64), `0x0013` TurboSHAKE-256 (Nh 64, one-step).
+
+> ⚠️ The summary-based plan mis-stated these: it had ChaCha at `0x0003` and HKDF-SHA-512
+> at `0x0002`. The E.3 ChaCha vector caught both. Always take ids from this table.
+
+### Derived nonce (§4.5.3)
+
+`nonce(i) = nonce_base XOR ((i<<1)|is_final)`, where the value is encoded big-endian and
+XORed into the **low 8 octets** of the `Nn`-octet `nonce_base` (requires `Nn ≥ 8`).
 
 ## payload_info wire layout (§4 / Table refs)
 

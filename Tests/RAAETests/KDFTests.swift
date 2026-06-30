@@ -7,8 +7,10 @@ struct KDFTests {
 	@Test func hkdfParameters() {
 		#expect(makeHKDFSHA256().outputSize == 32)
 		#expect(makeHKDFSHA256().id == 0x0001)
+		#expect(makeHKDFSHA384().outputSize == 48)
+		#expect(makeHKDFSHA384().id == 0x0002)
 		#expect(makeHKDFSHA512().outputSize == 64)
-		#expect(makeHKDFSHA512().id == 0x0002)
+		#expect(makeHKDFSHA512().id == 0x0003)
 	}
 
 	@Test func deriveIsDeterministic() {
