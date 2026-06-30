@@ -34,6 +34,8 @@ enum ProtocolID {
 
 /// Schedule + snapshot label strings (draft §4.4.3 Table 3, §4.7.4).
 enum Label {
+	/// Profile AAD label, bound as the first element of every segment AAD (§4.4.2).
+	static let aadLabel = Bytes.ascii("SEAL-DATA")
 	static let commit = Bytes.ascii("commit")
 	static let payloadKey = Bytes.ascii("payload_key")
 	static let accKey = Bytes.ascii("acc_key")
