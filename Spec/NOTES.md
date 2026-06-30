@@ -149,6 +149,25 @@ segment_aad(i, is_final, A_i):
 `C_i = AEAD.Encrypt(segment_key(i), nonce(i), segment_aad(i,is_final,A_i), P_i)`, split
 into `ct_i || tag_i`. Decrypt reverses it; AEAD auth failure ⇒ decryption error.
 
+### Masked multiset hash snapshot (§4.7.4) — verified vs E.1/E.7/E.14
+
+```
+contrib(i)   = KDF(protocol_id, "acc_contrib",  [snap_key], [uint64(i), tag(i)], Nh)
+acc          = contrib(0) XOR contrib(1) XOR ...                 ; 0^Nh for the empty set
+snapshot_tag = KDF(protocol_id, "snapshot_tag", [snap_key], [uint64(n_seg), acc], Nh)
+mask         = KDF(protocol_id, "snapshot_mask",[snap_key], [uint64(n_seg), snapshot_tag], Nh)
+snapshot     = (acc XOR mask) || snapshot_tag                    ; wrapped_acc || snapshot_tag
+```
+- `tag(i)` is the segment's AEAD tag (the final `Nt` octets). Finality is bound through
+  `tag(i)` (it's an AEAD input in both nonce modes), so `contrib` needs no explicit
+  is_final term.
+- XOR makes `acc` order-independent and self-inverse → **rewrite is O(1)**:
+  `acc' = acc XOR contrib(i, old_tag) XOR contrib(i, new_tag)`, `n_seg` unchanged.
+- `n_seg` is NOT stored in the snapshot; the verifier supplies it (the count of segments
+  present). **SnapVerify** recomputes the snapshot over the present segments and compares
+  constant-time; it accepts reordering but rejects add/drop/modify.
+- Empty object: `acc = 0^Nh`, `snapshot = mask || snapshot_tag` over zero segments.
+
 ### Vector constants (Appendix E, informative)
 
 Every block: `protocol_id="SEAL-RW-v1"`, `CEK = 32×0xAA`, `salt = 32×0x04`. Vectors

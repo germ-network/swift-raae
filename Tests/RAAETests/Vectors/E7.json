@@ -24,7 +24,8 @@
 			"nonce_hex": "030303030303030303030303",
 			"segment_aad_hex": "00095345414c2d4441544100080000000000000000000100",
 			"ciphertext_hex": "6a2b84e72ce8edbf4259eebd",
-			"tag_hex": "1574936244d54aedf589c87002dbac90"
+			"tag_hex": "1574936244d54aedf589c87002dbac90",
+			"contrib_hex": "322c4622cd9f50552740d1eee7a530eb3fd371e44178b8ce18816b53dd3f1587"
 		},
 		{
 			"index": 1,
@@ -32,7 +33,14 @@
 			"nonce_hex": "070707070707070707070707",
 			"segment_aad_hex": "00095345414c2d4441544100080000000000000001000101",
 			"ciphertext_hex": "50b0eda5d7a86a5a94e501f3170201736d755d56",
-			"tag_hex": "f22fb2b4bfed679d1d90d2a0814e429c"
+			"tag_hex": "f22fb2b4bfed679d1d90d2a0814e429c",
+			"contrib_hex": "7455e0472187dcd04a5747d508587a8c9f3e281818188be0edd46be8e32d4a6e"
 		}
-	]
+	],
+	"snapshot": {
+		"accumulator_hex": "4679a665ec188c856d17963beffd4a67a0ed59fc5960332ef55500bb3e125fe9",
+		"mask_hex": "ad55f19bb8997c8ad0def92830f0ce094542ec804f7b99e66f294164985979a8",
+		"wrapped_acc_hex": "eb2c57fe5481f00fbdc96f13df0d846ee5afb57c161baac89a7c41dfa64b2641",
+		"snapshot_tag_hex": "a08c73b5c414542cc06830d893d0eacac749418dea32b11d5cc121d6b2db93b8"
+	}
 }
