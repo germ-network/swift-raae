@@ -17,10 +17,14 @@ struct SuiteRegistryTests {
 		#expect(SuiteRegistry.kdf(id: 0x0003)?.outputSize == 64)  // HKDF-SHA-512
 	}
 
-	@Test func unknownIDsAreNil() {
-		// AES-256-GCM-SIV (0x001F) / AEGIS-256 (0x0021) / TurboSHAKE-256 (0x0013)
-		// are not registered until Stage 4.
-		#expect(SuiteRegistry.aead(id: 0x001F) == nil)
+	@Test func resolvesGCMSIV() {
+		#expect(SuiteRegistry.aead(id: 0x001F)?.id == 0x001F)  // AES-256-GCM-SIV
+	}
+
+	@Test func unsupportedSuitesAreNil() {
+		// Cut from v1 (no vetted Swift backend): AEGIS-256 (0x0021) needs libsodium/
+		// AES-NI; TurboSHAKE-256 (0x0013) needs a hand-rolled Keccak. See
+		// Spec/STAGE4-FEASIBILITY.md.
 		#expect(SuiteRegistry.aead(id: 0x0021) == nil)
 		#expect(SuiteRegistry.kdf(id: 0x0013) == nil)
 	}
