@@ -13,8 +13,8 @@ struct MultiSegmentVectorTests {
 
 		let sched = v["schedule"] as! [String: Any]
 		#expect(Hex.encode(schedule.commitment) == sched["commitment_hex"] as! String)
-		#expect(Hex.encode(schedule.payloadKey) == sched["payload_key_hex"] as! String)
-		#expect(Hex.encode(schedule.snapKey) == sched["acc_key_hex"] as! String)
+		#expect(keyHex(schedule.payloadKey) == sched["payload_key_hex"] as! String)
+		#expect(keyHex(schedule.snapKey) == sched["acc_key_hex"] as! String)
 
 		let seg = v["segment_0"] as! [String: Any]
 		let ctTag = Vectors.ciphertextWithTag(seg)

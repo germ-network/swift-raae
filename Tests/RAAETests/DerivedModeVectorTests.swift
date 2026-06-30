@@ -17,10 +17,10 @@ struct DerivedModeVectorTests {
 		#expect(schedule.aead.id == 0x001F)
 		let s = v["schedule"] as! [String: Any]
 		#expect(Hex.encode(schedule.commitment) == s["commitment_hex"] as! String)
-		#expect(Hex.encode(schedule.payloadKey) == s["payload_key_hex"] as! String)
-		#expect(Hex.encode(schedule.snapKey) == s["acc_key_hex"] as! String)
+		#expect(keyHex(schedule.payloadKey) == s["payload_key_hex"] as! String)
+		#expect(keyHex(schedule.snapKey) == s["acc_key_hex"] as! String)
 		#expect(schedule.nonceBase != nil)
-		#expect(Hex.encode(schedule.nonceBase!) == s["nonce_base_hex"] as! String)
+		#expect(keyHex(schedule.nonceBase!) == s["nonce_base_hex"] as! String)
 	}
 
 	@Test func segmentKeysAndDerivedNoncesMatch() throws {
@@ -31,10 +31,10 @@ struct DerivedModeVectorTests {
 				index: index, isFinal: (seg["is_final"] as! Int) == 1)
 			// epoch_length 0 ⇒ segment_key(i) = epoch_key(i), distinct per segment.
 			#expect(
-				Hex.encode(schedule.segmentKey(index: index)) == seg[
+				keyHex(schedule.segmentKey(index: index)) == seg[
 					"segment_key_hex"] as! String)
 			let nonce = try Segment.derivedNonce(
-				nonceBase: schedule.nonceBase!, position: pos)
+				nonceBase: keyBytes(schedule.nonceBase!), position: pos)
 			#expect(Hex.encode(nonce) == seg["nonce_hex"] as! String)
 		}
 	}

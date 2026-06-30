@@ -26,11 +26,14 @@ public protocol AEAD: Sendable {
 	/// (draft Table 4). Defaults to `false`.
 	var isMRAE: Bool { get }
 
-	/// Encrypt, returning `ct || tag`.
-	func seal(key: [UInt8], nonce: [UInt8], aad: [UInt8], plaintext: [UInt8]) throws -> [UInt8]
+	/// Encrypt, returning `ct || tag`. The key is a `SymmetricKey` so segment keys never
+	/// cross this boundary as a raw `[UInt8]`.
+	func seal(key: SymmetricKey, nonce: [UInt8], aad: [UInt8], plaintext: [UInt8]) throws
+		-> [UInt8]
 
 	/// Decrypt `ct || tag`, returning the plaintext or throwing `authenticationFailure`.
-	func open(key: [UInt8], nonce: [UInt8], aad: [UInt8], ciphertext: [UInt8]) throws -> [UInt8]
+	func open(key: SymmetricKey, nonce: [UInt8], aad: [UInt8], ciphertext: [UInt8]) throws
+		-> [UInt8]
 }
 
 extension AEAD {
@@ -38,10 +41,10 @@ extension AEAD {
 	public var isMRAE: Bool { false }
 
 	/// Validate key/nonce sizes against the algorithm parameters.
-	fileprivate func validate(key: [UInt8], nonce: [UInt8]) throws {
-		guard key.count == keyLength else {
+	fileprivate func validate(key: SymmetricKey, nonce: [UInt8]) throws {
+		guard key.bitCount == keyLength * 8 else {
 			throw AEADError.invalidParameters(
-				"key must be \(keyLength) octets, got \(key.count)")
+				"key must be \(keyLength) octets, got \(key.bitCount / 8)")
 		}
 		guard nonce.count == nonceLength else {
 			throw AEADError.invalidParameters(
@@ -57,19 +60,21 @@ struct AES128GCM: AEAD {
 	let nonceLength = 12
 	let tagLength = 16
 
-	func seal(key: [UInt8], nonce: [UInt8], aad: [UInt8], plaintext: [UInt8]) throws -> [UInt8]
+	func seal(key: SymmetricKey, nonce: [UInt8], aad: [UInt8], plaintext: [UInt8]) throws
+		-> [UInt8]
 	{
 		try validate(key: key, nonce: nonce)
 		let box = try AES.GCM.seal(
 			plaintext,
-			using: SymmetricKey(data: key),
+			using: key,
 			nonce: try AES.GCM.Nonce(data: nonce),
 			authenticating: aad
 		)
 		return Array(box.ciphertext) + Array(box.tag)
 	}
 
-	func open(key: [UInt8], nonce: [UInt8], aad: [UInt8], ciphertext: [UInt8]) throws -> [UInt8]
+	func open(key: SymmetricKey, nonce: [UInt8], aad: [UInt8], ciphertext: [UInt8]) throws
+		-> [UInt8]
 	{
 		try validate(key: key, nonce: nonce)
 		guard ciphertext.count >= tagLength else {
@@ -83,7 +88,7 @@ struct AES128GCM: AEAD {
 				nonce: try AES.GCM.Nonce(data: nonce), ciphertext: ct, tag: tag)
 			return Array(
 				try AES.GCM.open(
-					box, using: SymmetricKey(data: key), authenticating: aad))
+					box, using: key, authenticating: aad))
 		} catch {
 			throw AEADError.authenticationFailure
 		}
@@ -97,19 +102,21 @@ struct AES256GCM: AEAD {
 	let nonceLength = 12
 	let tagLength = 16
 
-	func seal(key: [UInt8], nonce: [UInt8], aad: [UInt8], plaintext: [UInt8]) throws -> [UInt8]
+	func seal(key: SymmetricKey, nonce: [UInt8], aad: [UInt8], plaintext: [UInt8]) throws
+		-> [UInt8]
 	{
 		try validate(key: key, nonce: nonce)
 		let box = try AES.GCM.seal(
 			plaintext,
-			using: SymmetricKey(data: key),
+			using: key,
 			nonce: try AES.GCM.Nonce(data: nonce),
 			authenticating: aad
 		)
 		return Array(box.ciphertext) + Array(box.tag)
 	}
 
-	func open(key: [UInt8], nonce: [UInt8], aad: [UInt8], ciphertext: [UInt8]) throws -> [UInt8]
+	func open(key: SymmetricKey, nonce: [UInt8], aad: [UInt8], ciphertext: [UInt8]) throws
+		-> [UInt8]
 	{
 		try validate(key: key, nonce: nonce)
 		guard ciphertext.count >= tagLength else {
@@ -126,7 +133,7 @@ struct AES256GCM: AEAD {
 			)
 			return Array(
 				try AES.GCM.open(
-					box, using: SymmetricKey(data: key), authenticating: aad))
+					box, using: key, authenticating: aad))
 		} catch {
 			throw AEADError.authenticationFailure
 		}
@@ -141,19 +148,21 @@ struct ChaCha20Poly1305: AEAD {
 	let nonceLength = 12
 	let tagLength = 16
 
-	func seal(key: [UInt8], nonce: [UInt8], aad: [UInt8], plaintext: [UInt8]) throws -> [UInt8]
+	func seal(key: SymmetricKey, nonce: [UInt8], aad: [UInt8], plaintext: [UInt8]) throws
+		-> [UInt8]
 	{
 		try validate(key: key, nonce: nonce)
 		let box = try ChaChaPoly.seal(
 			plaintext,
-			using: SymmetricKey(data: key),
+			using: key,
 			nonce: try ChaChaPoly.Nonce(data: nonce),
 			authenticating: aad
 		)
 		return Array(box.ciphertext) + Array(box.tag)
 	}
 
-	func open(key: [UInt8], nonce: [UInt8], aad: [UInt8], ciphertext: [UInt8]) throws -> [UInt8]
+	func open(key: SymmetricKey, nonce: [UInt8], aad: [UInt8], ciphertext: [UInt8]) throws
+		-> [UInt8]
 	{
 		try validate(key: key, nonce: nonce)
 		guard ciphertext.count >= tagLength else {
@@ -170,7 +179,7 @@ struct ChaCha20Poly1305: AEAD {
 			)
 			return Array(
 				try ChaChaPoly.open(
-					box, using: SymmetricKey(data: key), authenticating: aad))
+					box, using: key, authenticating: aad))
 		} catch {
 			throw AEADError.authenticationFailure
 		}

@@ -108,10 +108,11 @@ public enum Segment {
 		associatedData: [UInt8],
 		plaintext: [UInt8]
 	) throws -> [UInt8] {
-		guard let nonceBase = schedule.nonceBase else {
+		guard let nonceBaseKey = schedule.nonceBase else {
 			throw SegmentError.missingNonceBase
 		}
 		let key = schedule.segmentKey(index: position.index)
+		let nonceBase = nonceBaseKey.withUnsafeBytes { Array($0) }
 		let nonce = try derivedNonce(nonceBase: nonceBase, position: position)
 		let aad = aadDerivedMode(associatedData: associatedData, kdf: schedule.kdf)
 		return try schedule.aead.seal(
@@ -125,10 +126,11 @@ public enum Segment {
 		associatedData: [UInt8],
 		ciphertext: [UInt8]
 	) throws -> [UInt8] {
-		guard let nonceBase = schedule.nonceBase else {
+		guard let nonceBaseKey = schedule.nonceBase else {
 			throw SegmentError.missingNonceBase
 		}
 		let key = schedule.segmentKey(index: position.index)
+		let nonceBase = nonceBaseKey.withUnsafeBytes { Array($0) }
 		let nonce = try derivedNonce(nonceBase: nonceBase, position: position)
 		let aad = aadDerivedMode(associatedData: associatedData, kdf: schedule.kdf)
 		return try schedule.aead.open(
