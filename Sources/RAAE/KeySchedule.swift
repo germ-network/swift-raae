@@ -20,10 +20,18 @@ public struct PayloadSchedule {
 	/// Minimum commitment length (§4.6).
 	public static let minCommitmentLength = 16
 
+	/// The draft fixes the CEK at 32 octets (§4.5).
+	public static let cekLength = 32
+
 	public enum ScheduleError: Error, Equatable {
 		case unsupportedAEAD(UInt16)
 		case unsupportedKDF(UInt16)
 		case commitmentTooShort(Int)
+		/// CEK was not exactly `cekLength` (32) octets.
+		case invalidCEKLength(Int)
+		/// Derived nonce mode was selected with a non-MRAE AEAD. A rewrite would reuse
+		/// the segment's fixed nonce; only an MRAE AEAD (AES-256-GCM-SIV) is safe here.
+		case derivedModeRequiresMRAE(UInt16)
 	}
 
 	/// Derive the schedule from a 32-octet CEK and the message's `payload_info`.
@@ -36,11 +44,19 @@ public struct PayloadSchedule {
 		commitmentLength: Int? = nil
 	) throws {
 		try payloadInfo.validate()
+		guard cek.count == Self.cekLength else {
+			throw ScheduleError.invalidCEKLength(cek.count)
+		}
 		guard let aead = SuiteRegistry.aead(id: payloadInfo.aeadID) else {
 			throw ScheduleError.unsupportedAEAD(payloadInfo.aeadID)
 		}
 		guard let kdf = SuiteRegistry.kdf(id: payloadInfo.kdfID) else {
 			throw ScheduleError.unsupportedKDF(payloadInfo.kdfID)
+		}
+		// Derived nonce mode reuses a segment's fixed nonce on rewrite, so it is only
+		// safe with an MRAE AEAD (draft Table 4). Reject the unsafe pairing up front.
+		guard !(payloadInfo.nonceMode == .derived && !aead.isMRAE) else {
+			throw ScheduleError.derivedModeRequiresMRAE(payloadInfo.aeadID)
 		}
 		let commitLen = commitmentLength ?? kdf.outputSize
 		guard commitLen >= Self.minCommitmentLength else {

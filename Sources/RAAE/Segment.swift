@@ -24,8 +24,12 @@ public enum Segment {
 	}
 
 	/// `segment_aad(i, is_final, A_i)` for the random nonce mode (§4.4.2, Table 2).
+	///
+	/// `kdf` supplies the framing's over-large-field digest (`LH`); it matters only when
+	/// `associatedData` exceeds 65534 octets, but omitting it there would silently
+	/// collide distinct values, so it is required.
 	public static func aadRandomMode(
-		position: SegmentPosition, associatedData: [UInt8]
+		position: SegmentPosition, associatedData: [UInt8], kdf: KeyDerivation
 	) -> [UInt8] {
 		var elements: [[UInt8]] = [
 			Label.aadLabel,
@@ -35,16 +39,14 @@ public enum Segment {
 		if !associatedData.isEmpty {
 			elements.append(associatedData)
 		}
-		// Framing here never hits the over-large path (all elements are tiny), so the
-		// longHash is irrelevant.
-		return Framing.encode(elements, longHash: { _ in [] })
+		return Framing.encode(elements, longHash: kdf.longHash)
 	}
 
 	/// `segment_aad(i, is_final, A_i)` for derived nonce mode (§4.4.2, Table 2): index
 	/// and finality are bound in the nonce, so the AAD is empty unless `A_i` is present.
-	public static func aadDerivedMode(associatedData: [UInt8]) -> [UInt8] {
+	public static func aadDerivedMode(associatedData: [UInt8], kdf: KeyDerivation) -> [UInt8] {
 		if associatedData.isEmpty { return [] }
-		return Framing.encode([Label.aadLabel, associatedData], longHash: { _ in [] })
+		return Framing.encode([Label.aadLabel, associatedData], longHash: kdf.longHash)
 	}
 
 	/// `nonce(i) = nonce_base XOR ((i<<1)|is_final)` (§4.5.3): the value is encoded as a
@@ -76,7 +78,8 @@ public enum Segment {
 		nonce: [UInt8]
 	) throws -> (nonce: [UInt8], ciphertext: [UInt8]) {
 		let key = schedule.segmentKey(index: position.index)
-		let aad = aadRandomMode(position: position, associatedData: associatedData)
+		let aad = aadRandomMode(
+			position: position, associatedData: associatedData, kdf: schedule.kdf)
 		let ct = try schedule.aead.seal(
 			key: key, nonce: nonce, aad: aad, plaintext: plaintext)
 		return (nonce, ct)
@@ -91,7 +94,8 @@ public enum Segment {
 		ciphertext: [UInt8]
 	) throws -> [UInt8] {
 		let key = schedule.segmentKey(index: position.index)
-		let aad = aadRandomMode(position: position, associatedData: associatedData)
+		let aad = aadRandomMode(
+			position: position, associatedData: associatedData, kdf: schedule.kdf)
 		return try schedule.aead.open(
 			key: key, nonce: nonce, aad: aad, ciphertext: ciphertext)
 	}
@@ -109,7 +113,7 @@ public enum Segment {
 		}
 		let key = schedule.segmentKey(index: position.index)
 		let nonce = try derivedNonce(nonceBase: nonceBase, position: position)
-		let aad = aadDerivedMode(associatedData: associatedData)
+		let aad = aadDerivedMode(associatedData: associatedData, kdf: schedule.kdf)
 		return try schedule.aead.seal(
 			key: key, nonce: nonce, aad: aad, plaintext: plaintext)
 	}
@@ -126,7 +130,7 @@ public enum Segment {
 		}
 		let key = schedule.segmentKey(index: position.index)
 		let nonce = try derivedNonce(nonceBase: nonceBase, position: position)
-		let aad = aadDerivedMode(associatedData: associatedData)
+		let aad = aadDerivedMode(associatedData: associatedData, kdf: schedule.kdf)
 		return try schedule.aead.open(
 			key: key, nonce: nonce, aad: aad, ciphertext: ciphertext)
 	}
