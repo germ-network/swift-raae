@@ -1,0 +1,85 @@
+import Foundation
+import Testing
+
+@testable import RAAE
+
+@Suite("Payload schedule + single segment vs Appendix E.1")
+struct ScheduleVectorTests {
+	/// Build the E.1 schedule from the vendored vector.
+	func loadE1() throws -> (schedule: PayloadSchedule, json: [String: Any]) {
+		let v = try Vectors.load("E1")
+		let pi = v["payload_info"] as! [String: Any]
+		let info = PayloadInfo(
+			aeadID: UInt16(pi["aead_id"] as! Int),
+			segmentMax: UInt32(pi["segment_max"] as! Int),
+			kdfID: UInt16(pi["kdf_id"] as! Int),
+			snapID: UInt16(pi["snap_id"] as! Int),
+			nonceMode: PayloadInfo.NonceMode(
+				rawValue: UInt8(pi["nonce_mode"] as! Int))!,
+			epochLength: UInt8(pi["epoch_length"] as! Int),
+			salt: Hex.decode(pi["salt_hex"] as! String)
+		)
+		let schedule = try PayloadSchedule(
+			protocolID: ProtocolID.mutable,
+			cek: Hex.decode(v["cek_hex"] as! String),
+			payloadInfo: info
+		)
+		return (schedule, v)
+	}
+
+	@Test func scheduleMatchesVector() throws {
+		let (schedule, v) = try loadE1()
+		let sched = v["schedule"] as! [String: Any]
+		#expect(Hex.encode(schedule.commitment) == sched["commitment_hex"] as! String)
+		#expect(Hex.encode(schedule.payloadKey) == sched["payload_key_hex"] as! String)
+		#expect(Hex.encode(schedule.snapKey) == sched["acc_key_hex"] as! String)
+	}
+
+	@Test func segmentAADMatchesVector() throws {
+		let (_, v) = try loadE1()
+		let seg = v["segment_0"] as! [String: Any]
+		let aad = Segment.aadRandomMode(
+			position: .init(index: 0, isFinal: true), associatedData: [])
+		#expect(Hex.encode(aad) == seg["segment_aad_hex"] as! String)
+	}
+
+	/// Decrypting the vector's ciphertext proves segment_key, nonce, and AAD are all
+	/// correct (the AEAD tag binds them); then re-encrypting under the fixed nonce pins
+	/// the ciphertext in both directions.
+	@Test func segmentDecryptsAndReencryptsExactly() throws {
+		let (schedule, v) = try loadE1()
+		let seg = v["segment_0"] as! [String: Any]
+		let nonce = Hex.decode(seg["nonce_hex"] as! String)
+		let expectedCT =
+			Hex.decode(seg["ciphertext_hex"] as! String)
+			+ Hex.decode(seg["tag_hex"] as! String)
+		let position = SegmentPosition(index: 0, isFinal: (seg["is_final"] as! Int) == 1)
+
+		// Decrypt → recovers the (unpublished) plaintext; success authenticates the path.
+		let plaintext = try Segment.decryptRandom(
+			schedule: schedule, position: position,
+			associatedData: [], nonce: nonce, ciphertext: expectedCT)
+		#expect(plaintext.count == Hex.decode(seg["ciphertext_hex"] as! String).count)
+
+		// Re-encrypt the recovered plaintext under the same fixed nonce ⇒ exact ct||tag.
+		let (_, ct) = try Segment.encryptRandom(
+			schedule: schedule, position: position,
+			associatedData: [], plaintext: plaintext, nonce: nonce)
+		#expect(Hex.encode(ct) == Hex.encode(expectedCT))
+	}
+
+	@Test func payloadInfoValidationRejectsBadParameters() {
+		var info = PayloadInfo(
+			aeadID: 2, segmentMax: 16384, kdfID: 1, snapID: 1,
+			nonceMode: .random, epochLength: 1, salt: [UInt8](repeating: 4, count: 32))
+		#expect(throws: Never.self) { try info.validate() }
+
+		info.segmentMax = 4095
+		#expect(throws: PayloadInfo.ValidationError.self) { try info.validate() }
+		info.segmentMax = 12288  // not a power of two
+		#expect(throws: PayloadInfo.ValidationError.self) { try info.validate() }
+		info.segmentMax = 16384
+		info.epochLength = 64
+		#expect(throws: PayloadInfo.ValidationError.self) { try info.validate() }
+	}
+}

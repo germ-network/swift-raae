@@ -92,6 +92,53 @@ payload_info = [ aead_id(uint16) | segment_max(uint32) | kdf_id(uint16) |
 The KDF applies `frame` to each element of this list when it is used as a KDF input.
 `segment_max` is a power of two ≥ 4096; `epoch_length` is `r ∈ [0,63]`.
 
+## Payload schedule (§4.5.1) — verified byte-exact against E.1
+
+All keys derive from `CEK` (ikm) with `payload_info` as the KDF `info` list. The
+`info` list is the **7 payload_info elements in order**, each framed individually:
+`[aead_id(u16), segment_max_be(u32), kdf_id(u16), snap_id(u16), nonce_mode(u8),
+epoch_length(u8), salt(32)]`.
+
+```
+commitment  = KDF(protocol_id, "commit",      [CEK], payload_info, commit_len)  ; default Nh, min 16
+payload_key = KDF(protocol_id, "payload_key", [CEK], payload_info, Nk)
+snap_key    = KDF(protocol_id, "acc_key",     [CEK], payload_info, Nh)
+nonce_base  = KDF(protocol_id, "nonce_base",  [CEK], payload_info, Nn)           ; derived mode only
+```
+
+The draft prints a full KDF trace for the commitment; our Stage-1 KDF reproduces
+`prk` and `commitment` exactly, confirming framing + Extract/Expand are correct.
+
+### Segment key via epoch key (§4.5.2)
+
+```
+segment_key(i):
+    epoch_index = i >> epoch_length
+    return KDF(protocol_id, "epoch_key", [payload_key], [uint64(epoch_index)], Nk)
+```
+`epoch_length = r ∈ [0,63]` (MUST reject ≥ 64); `r = 0` ⇒ per-segment key.
+
+### Segment AAD (§4.4.2, Table 2)
+
+```
+segment_aad(i, is_final, A_i):
+    random mode:  encode(aad_label, uint64(i), uint8(is_final)[, A_i])   ; A_i appended only if non-empty
+    derived mode: ""  if A_i empty, else encode(aad_label, A_i)          ; i/is_final are bound in the nonce
+```
+`aad_label = "SEAL-DATA"`. Verified: E.1 seg0 aad = `encode("SEAL-DATA", uint64(0), uint8(1))`.
+
+### EncryptSegment / DecryptSegment (§4.8)
+
+`C_i = AEAD.Encrypt(segment_key(i), nonce(i), segment_aad(i,is_final,A_i), P_i)`, split
+into `ct_i || tag_i`. Decrypt reverses it; AEAD auth failure ⇒ decryption error.
+
+### Vector constants (Appendix E, informative)
+
+Every block: `protocol_id="SEAL-RW-v1"`, `CEK = 32×0xAA`, `salt = 32×0x04`. Vectors
+print ciphertext+tag but not plaintext; tests recover `P_i` by decrypting (the AEAD tag
+guarantees `segment_key`/`nonce`/`aad` are all correct), then re-encrypt under the
+vector's fixed nonce to pin the ciphertext in both directions.
+
 ## Stage-1 scope
 
 Two-step HKDF KDFs + AES-256-GCM / ChaCha20-Poly1305 AEADs via swift-crypto, framing,
