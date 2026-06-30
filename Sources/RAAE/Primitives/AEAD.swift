@@ -21,6 +21,11 @@ public protocol AEAD: Sendable {
 	/// Tag size in octets (`Nt` in the draft).
 	var tagLength: Int { get }
 
+	/// Whether this AEAD is nonce-misuse-resistant (MRAE). Derived nonce mode reuses a
+	/// segment's fixed nonce on rewrite, so a rewritable profile must use an MRAE AEAD
+	/// (draft Table 4). Defaults to `false`.
+	var isMRAE: Bool { get }
+
 	/// Encrypt, returning `ct || tag`.
 	func seal(key: [UInt8], nonce: [UInt8], aad: [UInt8], plaintext: [UInt8]) throws -> [UInt8]
 
@@ -29,6 +34,9 @@ public protocol AEAD: Sendable {
 }
 
 extension AEAD {
+	/// Non-MRAE by default; MRAE suites (e.g. AES-256-GCM-SIV) override.
+	public var isMRAE: Bool { false }
+
 	/// Validate key/nonce sizes against the algorithm parameters.
 	fileprivate func validate(key: [UInt8], nonce: [UInt8]) throws {
 		guard key.count == keyLength else {

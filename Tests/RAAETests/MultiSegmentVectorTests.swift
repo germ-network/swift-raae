@@ -43,7 +43,8 @@ struct MultiSegmentVectorTests {
 			let nonce = Hex.decode(seg["nonce_hex"] as! String)
 			let ctTag = Vectors.ciphertextWithTag(seg)
 
-			let aad = Segment.aadRandomMode(position: pos, associatedData: [])
+			let aad = Segment.aadRandomMode(
+				position: pos, associatedData: [], kdf: schedule.kdf)
 			#expect(Hex.encode(aad) == seg["segment_aad_hex"] as! String)
 
 			let pt = try Segment.decryptRandom(
@@ -94,12 +95,13 @@ struct DerivedNonceTests {
 		}
 	}
 
-	/// Derived-mode round-trip with AES-256-GCM (the byte-exact derived vector E.15.1
-	/// uses AES-256-GCM-SIV and is pinned in Stage 4). Distinct positions get distinct
-	/// nonces, so this is also a self-consistency check on key/nonce/AAD derivation.
+	/// Derived-mode round-trip with AES-256-GCM-SIV (an MRAE suite, as the schedule now
+	/// requires for derived mode). Distinct positions get distinct nonces, so this is
+	/// also a self-consistency check on key/nonce/AAD derivation.
 	@Test func derivedModeRoundTrips() throws {
 		var info = Vectors.payloadInfo(from: try Vectors.load("E7"))
 		info.nonceMode = .derived
+		info.aeadID = 0x001F  // AES-256-GCM-SIV (MRAE)
 		let schedule = try PayloadSchedule(
 			protocolID: ProtocolID.mutable,
 			cek: [UInt8](repeating: 0xAA, count: 32), payloadInfo: info)
@@ -120,7 +122,8 @@ struct DerivedNonceTests {
 	}
 
 	@Test func derivedModeAADIsEmptyWithoutAssociatedData() {
-		#expect(Segment.aadDerivedMode(associatedData: []) == [])
-		#expect(!Segment.aadDerivedMode(associatedData: [0x09]).isEmpty)
+		let kdf = SuiteRegistry.kdf(id: 0x0001)!
+		#expect(Segment.aadDerivedMode(associatedData: [], kdf: kdf) == [])
+		#expect(!Segment.aadDerivedMode(associatedData: [0x09], kdf: kdf).isEmpty)
 	}
 }

@@ -7,9 +7,11 @@ import Testing
 struct PublicAPITests {
 	/// Build a schedule, encrypt segments in random mode, decrypt them back, and
 	/// authenticate the set with a snapshot — using only public API.
-	func makeSchedule(nonceMode: PayloadInfo.NonceMode) throws -> PayloadSchedule {
+	func makeSchedule(
+		nonceMode: PayloadInfo.NonceMode, aeadID: UInt16 = 0x0002
+	) throws -> PayloadSchedule {
 		let info = PayloadInfo(
-			aeadID: 0x0002,  // AES-256-GCM
+			aeadID: aeadID,
 			segmentMax: 16384,
 			kdfID: 0x0001,  // HKDF-SHA-256
 			snapID: 0x0001,
@@ -70,7 +72,8 @@ struct PublicAPITests {
 	}
 
 	@Test func derivedModeRoundTrip() throws {
-		let schedule = try makeSchedule(nonceMode: .derived)
+		// Derived mode now requires an MRAE suite (AES-256-GCM-SIV).
+		let schedule = try makeSchedule(nonceMode: .derived, aeadID: 0x001F)
 		let pos = SegmentPosition(index: 3, isFinal: false)
 		let message = Array("derived-mode payload".utf8)
 		let ct = try Segment.encryptDerived(

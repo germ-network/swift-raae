@@ -175,6 +175,17 @@ print ciphertext+tag but not plaintext; tests recover `P_i` by decrypting (the A
 guarantees `segment_key`/`nonce`/`aad` are all correct), then re-encrypt under the
 vector's fixed nonce to pin the ciphertext in both directions.
 
+## Implementation safety rails (beyond the spec text)
+
+- **Segment AAD framing uses the real `LH`.** `Segment.aad*Mode` takes the message KDF so
+  over-large `A_i` (> 65534 octets) frames to `0xFFFF || LH(A_i)`, not a stub — otherwise
+  distinct large associated-data values would collide.
+- **Derived nonce mode requires an MRAE AEAD.** `PayloadSchedule.init` rejects
+  `nonce_mode = derived` unless the AEAD is MRAE (`AEAD.isMRAE`; today only
+  AES-256-GCM-SIV). A rewrite reuses a segment's fixed nonce, so non-MRAE there is unsafe.
+  (Write-once profiles could relax this later behind an explicit opt-in.)
+- **CEK length is fixed at 32 octets** and validated in `PayloadSchedule.init`.
+
 ## Stage-1 scope
 
 Two-step HKDF KDFs + AES-256-GCM / ChaCha20-Poly1305 AEADs via swift-crypto, framing,

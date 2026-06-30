@@ -14,6 +14,7 @@ struct AES256GCMSIV: AEAD {
 	let keyLength = 32
 	let nonceLength = 12
 	let tagLength = 16
+	let isMRAE = true
 
 	func seal(key: [UInt8], nonce: [UInt8], aad: [UInt8], plaintext: [UInt8]) throws -> [UInt8]
 	{

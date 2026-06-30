@@ -20,10 +20,11 @@ struct ScheduleVectorTests {
 	}
 
 	@Test func segmentAADMatchesVector() throws {
-		let (_, v) = try loadE1()
+		let (schedule, v) = try loadE1()
 		let seg = v["segment_0"] as! [String: Any]
 		let aad = Segment.aadRandomMode(
-			position: .init(index: 0, isFinal: true), associatedData: [])
+			position: .init(index: 0, isFinal: true), associatedData: [],
+			kdf: schedule.kdf)
 		#expect(Hex.encode(aad) == seg["segment_aad_hex"] as! String)
 	}
 
