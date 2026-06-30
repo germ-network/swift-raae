@@ -2,7 +2,7 @@ import Crypto
 import Foundation
 
 /// Errors raised by the AEAD layer.
-enum AEADError: Error, Equatable {
+public enum AEADError: Error, Equatable {
 	/// Key, nonce, or ciphertext length did not match the algorithm's parameters.
 	case invalidParameters(String)
 	/// Authentication failed on `open` (tag mismatch / tampered input).
@@ -11,7 +11,7 @@ enum AEADError: Error, Equatable {
 
 /// An AEAD as parameterized by the draft (Table 7). For every Table-7 AEAD the output
 /// is `C_i = ct_i || tag_i` with the tag in the final `Nt` octets (§4.8).
-protocol AEAD: Sendable {
+public protocol AEAD: Sendable {
 	/// `aead_id` from Table 7.
 	var id: UInt16 { get }
 	/// Key size in octets (`Nk` in the draft).

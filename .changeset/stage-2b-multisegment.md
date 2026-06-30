@@ -1,5 +1,5 @@
 ---
-"@germ-network/swift-raae": minor
+"@germ-network/swift-raae": patch
 ---
 
 Stage 2b: derived nonce mode and multi-segment. Adds the derived-nonce construction

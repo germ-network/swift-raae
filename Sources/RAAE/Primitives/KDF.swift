@@ -7,7 +7,7 @@ import Foundation
 /// `ikm` and `info` are *lists* of byte strings; each element is framed individually
 /// by `encode`. Implementations come in two styles — two-step (HKDF Extract→Expand)
 /// and one-step (XOF). Stage 1 ships the HKDF style; TurboSHAKE lands in Stage 4.
-protocol KeyDerivation: Sendable {
+public protocol KeyDerivation: Sendable {
 	/// Output size of the native primitive, in octets (`Nh` in the draft).
 	var outputSize: Int { get }
 

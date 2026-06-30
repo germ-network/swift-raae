@@ -7,24 +7,42 @@ import Foundation
 /// aead_id(uint16) | segment_max(uint32) | kdf_id(uint16) | snap_id(uint16) |
 /// nonce_mode(uint8) | epoch_length(uint8) | salt(32)
 /// ```
-struct PayloadInfo: Equatable {
+public struct PayloadInfo: Equatable, Sendable {
 	/// Nonce construction (draft Table 10).
-	enum NonceMode: UInt8, Equatable {
+	public enum NonceMode: UInt8, Equatable, Sendable {
 		case random = 0x00
 		case derived = 0x01
 	}
 
-	var aeadID: UInt16
-	var segmentMax: UInt32
-	var kdfID: UInt16
-	var snapID: UInt16
-	var nonceMode: NonceMode
+	public var aeadID: UInt16
+	public var segmentMax: UInt32
+	public var kdfID: UInt16
+	public var snapID: UInt16
+	public var nonceMode: NonceMode
 	/// `r ∈ [0, 63]`; each epoch covers `2^r` consecutive segments.
-	var epochLength: UInt8
+	public var epochLength: UInt8
 	/// Per-content salt, exactly 32 octets.
-	var salt: [UInt8]
+	public var salt: [UInt8]
 
-	enum ValidationError: Error, Equatable {
+	public init(
+		aeadID: UInt16,
+		segmentMax: UInt32,
+		kdfID: UInt16,
+		snapID: UInt16,
+		nonceMode: NonceMode,
+		epochLength: UInt8,
+		salt: [UInt8]
+	) {
+		self.aeadID = aeadID
+		self.segmentMax = segmentMax
+		self.kdfID = kdfID
+		self.snapID = snapID
+		self.nonceMode = nonceMode
+		self.epochLength = epochLength
+		self.salt = salt
+	}
+
+	public enum ValidationError: Error, Equatable {
 		case saltLength(Int)
 		case segmentMaxNotPowerOfTwo(UInt32)
 		case segmentMaxTooSmall(UInt32)
@@ -32,7 +50,7 @@ struct PayloadInfo: Equatable {
 	}
 
 	/// Validate the constraints from §4.4 / §4.5.2.
-	func validate() throws {
+	public func validate() throws {
 		guard salt.count == 32 else { throw ValidationError.saltLength(salt.count) }
 		guard segmentMax >= 4096 else {
 			throw ValidationError.segmentMaxTooSmall(segmentMax)
@@ -59,7 +77,7 @@ struct PayloadInfo: Equatable {
 	}
 
 	/// The concatenated on-the-wire encoding (44 octets), unframed.
-	var wireBytes: [UInt8] {
+	public var wireBytes: [UInt8] {
 		kdfInfoElements.flatMap { $0 }
 	}
 }

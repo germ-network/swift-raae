@@ -1,5 +1,5 @@
 ---
-"@germ-network/swift-raae": minor
+"@germ-network/swift-raae": patch
 ---
 
 Stage 1: primitive abstraction layer and KDF framing. Adds pluggable `AEAD` and

@@ -1,5 +1,5 @@
 ---
-"@germ-network/swift-raae": minor
+"@germ-network/swift-raae": patch
 ---
 
 Stage 3: masked multiset hash snapshot authenticator and mutable interface. Adds

@@ -1,5 +1,5 @@
 ---
-"@germ-network/swift-raae": minor
+"@germ-network/swift-raae": patch
 ---
 
 Stage 4: AES-256-GCM-SIV (the MRAE suite for derived-nonce rewrites) via swift-crypto's
