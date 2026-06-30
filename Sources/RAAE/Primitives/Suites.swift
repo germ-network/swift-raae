@@ -11,6 +11,7 @@ enum SuiteRegistry {
 		case 0x0001: AES128GCM()
 		case 0x0002: AES256GCM()
 		case 0x001D: ChaCha20Poly1305()
+		case 0x001F: AES256GCMSIV()
 		default: nil
 		}
 	}

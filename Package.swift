@@ -17,7 +17,8 @@ let package = Package(
 		.target(
 			name: "RAAE",
 			dependencies: [
-				.product(name: "Crypto", package: "swift-crypto")
+				.product(name: "Crypto", package: "swift-crypto"),
+				.product(name: "_CryptoExtras", package: "swift-crypto"),
 			]
 		),
 		.testTarget(
