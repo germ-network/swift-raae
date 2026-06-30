@@ -34,6 +34,33 @@ in a later stage.
 
 Platforms: macOS, iOS, and Linux (via swift-crypto).
 
+## Usage
+
+This release exposes the verified low-level engine (an ergonomic whole-message facade
+is deferred):
+
+```swift
+import RAAE
+
+let info = PayloadInfo(
+    aeadID: 0x0002,   // AES-256-GCM
+    segmentMax: 16384,
+    kdfID: 0x0001,    // HKDF-SHA-256
+    snapID: 0x0001,   // masked multiset hash
+    nonceMode: .random,
+    epochLength: 1,
+    salt: salt)       // 32 random octets
+
+let schedule = try PayloadSchedule(
+    protocolID: ProtocolID.mutable, cek: cek, payloadInfo: info)
+
+let pos = SegmentPosition(index: 0, isFinal: true)
+let nonce = Segment.freshNonce(for: schedule.aead)
+let (_, ciphertext) = try Segment.encryptRandom(
+    schedule: schedule, position: pos, associatedData: [],
+    plaintext: plaintext, nonce: nonce)
+```
+
 ## Building
 
 ```sh
@@ -46,15 +73,20 @@ swift test
 | Stage | Scope | Status |
 |-------|-------|--------|
 | 0 | Repo bootstrap, package scaffold, CI | ✅ |
-| 1 | AEAD/KDF protocols, KDF framing, swift-crypto backends | ⬜ |
-| 2a | Key schedule, commitment, single-segment (random nonce) | ⬜ |
-| 2b | Epoch keys, derived nonce mode, multi-segment | ⬜ |
-| 3 | Snapshot authenticator, rewrite/verify | ⬜ |
-| 4 | Extended suites (AEGIS, TurboSHAKE, AES-256-GCM-SIV) | ⬜ |
-| 5 | Hardening, ergonomics, docs, release | ⬜ |
+| 1 | AEAD/KDF protocols, KDF framing, swift-crypto backends | ✅ |
+| 2a | Key schedule, commitment, single-segment (random nonce) | ✅ |
+| 2b | Epoch keys, derived nonce mode, multi-segment | ✅ |
+| 3 | Snapshot authenticator, rewrite/verify | ✅ |
+| 4 | AES-256-GCM-SIV (MRAE); AEGIS/TurboSHAKE deferred | ✅ |
+| 5 | Public engine API, DocC, property tests, 0.0.1 | ✅ |
 
-Conformance is validated against the draft's Appendix E test vectors (vendored under
-`Tests/RAAETests/Vectors/`).
+Suite coverage: **AEAD** AES-128/256-GCM, ChaCha20-Poly1305, AES-256-GCM-SIV; **KDF**
+HKDF-SHA-256/384/512. AEGIS and TurboSHAKE are documented future work
+([`Spec/STAGE4-FEASIBILITY.md`](Spec/STAGE4-FEASIBILITY.md)).
+
+Every cryptographic stage is validated **byte-exact** against the draft's Appendix E
+test vectors (vendored under `Tests/RAAETests/Vectors/`): E.1, E.3, E.7, E.14.1, E.15.1,
+and the E.17.1 negative case.
 
 ## Contributing and Collaboration
 

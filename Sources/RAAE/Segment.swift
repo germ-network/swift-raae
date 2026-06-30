@@ -2,16 +2,21 @@ import Crypto
 import Foundation
 
 /// A segment's position: its index and whether it is the final segment (§4.4).
-struct SegmentPosition: Equatable {
-	var index: UInt64
-	var isFinal: Bool
+public struct SegmentPosition: Equatable, Sendable {
+	public var index: UInt64
+	public var isFinal: Bool
+
+	public init(index: UInt64, isFinal: Bool) {
+		self.index = index
+		self.isFinal = isFinal
+	}
 }
 
 /// Per-segment encryption/decryption (draft §4.4.2 AAD + §4.8), for both the random and
 /// derived nonce modes. Derived mode binds the index/is_final into the nonce rather than
 /// the AAD.
-enum Segment {
-	enum SegmentError: Error, Equatable {
+public enum Segment {
+	public enum SegmentError: Error, Equatable {
 		/// Derived nonce mode needs `Nn >= 8` to hold `(i<<1)|is_final`.
 		case nonceTooShortForDerivedMode(Int)
 		/// Derived-mode operation attempted without a `nonce_base` in the schedule.
@@ -19,7 +24,7 @@ enum Segment {
 	}
 
 	/// `segment_aad(i, is_final, A_i)` for the random nonce mode (§4.4.2, Table 2).
-	static func aadRandomMode(
+	public static func aadRandomMode(
 		position: SegmentPosition, associatedData: [UInt8]
 	) -> [UInt8] {
 		var elements: [[UInt8]] = [
@@ -37,14 +42,16 @@ enum Segment {
 
 	/// `segment_aad(i, is_final, A_i)` for derived nonce mode (§4.4.2, Table 2): index
 	/// and finality are bound in the nonce, so the AAD is empty unless `A_i` is present.
-	static func aadDerivedMode(associatedData: [UInt8]) -> [UInt8] {
+	public static func aadDerivedMode(associatedData: [UInt8]) -> [UInt8] {
 		if associatedData.isEmpty { return [] }
 		return Framing.encode([Label.aadLabel, associatedData], longHash: { _ in [] })
 	}
 
 	/// `nonce(i) = nonce_base XOR ((i<<1)|is_final)` (§4.5.3): the value is encoded as a
 	/// big-endian integer right-aligned to (and XORed into) the low octets of `nonce_base`.
-	static func derivedNonce(nonceBase: [UInt8], position: SegmentPosition) throws -> [UInt8] {
+	public static func derivedNonce(nonceBase: [UInt8], position: SegmentPosition) throws
+		-> [UInt8]
+	{
 		guard nonceBase.count >= 8 else {
 			throw SegmentError.nonceTooShortForDerivedMode(nonceBase.count)
 		}
@@ -61,7 +68,7 @@ enum Segment {
 	///
 	/// The nonce is caller-supplied so tests can pin a vector's fixed nonce; production
 	/// random-mode callers pass a freshly generated `Nn`-octet nonce.
-	static func encryptRandom(
+	public static func encryptRandom(
 		schedule: PayloadSchedule,
 		position: SegmentPosition,
 		associatedData: [UInt8],
@@ -76,7 +83,7 @@ enum Segment {
 	}
 
 	/// Decrypt one segment in random nonce mode; throws on AEAD authentication failure.
-	static func decryptRandom(
+	public static func decryptRandom(
 		schedule: PayloadSchedule,
 		position: SegmentPosition,
 		associatedData: [UInt8],
@@ -91,7 +98,7 @@ enum Segment {
 
 	/// Encrypt one segment in derived nonce mode, returning `ct || tag`. No nonce is
 	/// stored; it is recomputed from `nonce_base` and the position.
-	static func encryptDerived(
+	public static func encryptDerived(
 		schedule: PayloadSchedule,
 		position: SegmentPosition,
 		associatedData: [UInt8],
@@ -108,7 +115,7 @@ enum Segment {
 	}
 
 	/// Decrypt one segment in derived nonce mode; throws on AEAD authentication failure.
-	static func decryptDerived(
+	public static func decryptDerived(
 		schedule: PayloadSchedule,
 		position: SegmentPosition,
 		associatedData: [UInt8],
@@ -125,7 +132,7 @@ enum Segment {
 	}
 
 	/// Generate a fresh random `Nn`-octet nonce for random nonce mode.
-	static func freshNonce(for aead: AEAD) -> [UInt8] {
+	public static func freshNonce(for aead: AEAD) -> [UInt8] {
 		var nonce = [UInt8](repeating: 0, count: aead.nonceLength)
 		for i in nonce.indices {
 			nonce[i] = UInt8.random(in: 0...255)

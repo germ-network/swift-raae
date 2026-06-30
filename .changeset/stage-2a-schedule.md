@@ -1,5 +1,5 @@
 ---
-"@germ-network/swift-raae": minor
+"@germ-network/swift-raae": patch
 ---
 
 Stage 2a: payload schedule, commitment, and single-segment (random nonce). Adds
