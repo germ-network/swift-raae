@@ -230,6 +230,11 @@ vector's fixed nonce to pin the ciphertext in both directions.
   generation; pinned nonces (vectors) go through the unmetered `Segment` static. The `maxEpochKeysLog2` ceiling (§5.9.6) is advisory and not metered.
   Cross-process accounting (snapshot via `persistableState`, restore via `seed`) and the
   decrypt-side forgery bound are the host's responsibility.
+- **Host obligations are documented on the DocC landing page** (and on the relevant
+  symbols): unique `(CEK, salt)` per object (shared schedules make objects mutually
+  substitutable), snapshot freshness/rollback (an old `(segments, snapshot)` pair
+  replays — SnapVerify proves set integrity, not recency), publish only the masked
+  `snapshotValue` (never the raw accumulator), and cross-process budget persistence.
 
 ## Stage-1 scope
 

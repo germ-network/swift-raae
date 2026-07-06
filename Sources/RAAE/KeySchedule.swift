@@ -161,7 +161,7 @@ public struct PayloadSchedule {
 
 	/// Verify a published commitment against this schedule's, in constant time (§4.6).
 	///
-	/// A reader **MUST** call this (or obtain the schedule via ``startDecrypt(protocolID:cek:payloadInfo:publishedCommitment:)``)
+	/// A reader **MUST** call this (or obtain the schedule via ``startDecrypt(protocolID:cek:payloadInfo:publishedCommitment:expectedCommitmentLength:)``)
 	/// and abandon decryption on a throw — a mismatch means the wrong CEK or parameters and
 	/// MUST be treated as an authentication failure for the object.
 	public func verifyCommitment(_ published: [UInt8]) throws {

@@ -56,6 +56,10 @@ public struct MaskedMultisetHash {
 	}
 
 	/// `acc = XOR of contrib(i)` over the supplied segments (order-independent).
+	///
+	/// The raw accumulator is internal state, kept only so rewrites are O(1) — never
+	/// publish it. The published form is
+	/// ``snapshotValue(segmentCount:accumulator:)``, which masks it.
 	public func accumulator(segments: [(index: UInt64, tag: [UInt8])]) -> [UInt8] {
 		var acc = [UInt8](repeating: 0, count: outputSize)
 		for segment in segments {
@@ -88,7 +92,8 @@ public struct MaskedMultisetHash {
 	}
 
 	/// O(1) rewrite update: remove the old contribution and add the new one (§4.7.4).
-	/// The segment count is unchanged.
+	/// The segment count is unchanged. Operates on (and returns) the raw accumulator —
+	/// see the publication note on ``accumulator(segments:)``.
 	public func rewrittenAccumulator(
 		accumulator: [UInt8], index: UInt64, oldTag: [UInt8], newTag: [UInt8]
 	) -> [UInt8] {
@@ -100,6 +105,11 @@ public struct MaskedMultisetHash {
 
 	/// `SnapVerify`: recompute the snapshot over the present segments and compare it,
 	/// constant-time, to the published value. `n_seg` is the number of segments supplied.
+	///
+	/// - Note: verification proves the presented set matches the snapshot, not that the
+	///   snapshot is current — a complete old `(segments, snapshot)` pair replays.
+	///   Freshness/rollback protection is the host's obligation: bind the snapshot to a
+	///   version, or store it authenticated out of band.
 	public func verify(snapshot expected: [UInt8], segments: [(index: UInt64, tag: [UInt8])])
 		-> Bool
 	{

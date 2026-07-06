@@ -49,16 +49,17 @@ let info = PayloadInfo(
     snapID: 0x0001,   // masked multiset hash
     nonceMode: .random,
     epochLength: 1,
-    salt: salt)       // 32 random octets
+    salt: salt)       // 32 random octets, unique per object
 
 let schedule = try PayloadSchedule(
     protocolID: ProtocolID.mutable, cek: cek, payloadInfo: info)
 
+// The metered encryptor generates the nonce, returns it for storage, and
+// tracks the §5.9 usage budget.
+let encryptor = PayloadEncryptor(schedule: schedule)
 let pos = SegmentPosition(index: 0, isFinal: true)
-let nonce = Segment.freshNonce(for: schedule.aead)
-let (_, ciphertext) = try Segment.encryptRandom(
-    schedule: schedule, position: pos, associatedData: [],
-    plaintext: plaintext, nonce: nonce)
+let (nonce, ciphertext) = try encryptor.encryptRandom(
+    position: pos, associatedData: [], plaintext: plaintext)
 ```
 
 ## Building
