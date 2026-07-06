@@ -191,9 +191,13 @@ vector's fixed nonce to pin the ciphertext in both directions.
   `nonce_mode = derived` with a non-MRAE AEAD — except under `SEAL-RO-v1`
   (`ProtocolID.immutable`), the write-once profile, where §4.5.3.2 permits the pairing
   because each segment is encrypted exactly once. Unknown protocol IDs are treated as
-  rewritable (strict). The write-once discipline itself is the caller's obligation;
-  `PayloadEncryptor` meters it for a single live writer (per-segment budget = one
-  encryption, per-epoch-key budget = the epoch's `2^r` indices).
+  rewritable (strict). The write-once non-MRAE pairing is only encryptable through
+  `PayloadEncryptor` (per-segment budget = one encryption, per-epoch-key budget = the
+  epoch's `2^r` indices; the per-segment cap hard-stops under both `enforce` and
+  `warn`) — the unmetered `Segment.encryptDerived` static refuses it with
+  `writeOnceRequiresMeteredEncryptor`, since an unmetered rewrite would reuse the
+  segment's fixed nonce. Decryption is ungated. Cross-process/multi-writer discipline
+  (seeding counters via `persistableState`) remains the host's obligation.
 - **CEK length is fixed at 32 octets** and validated in `PayloadSchedule.init`.
 - **`segment_max` is enforced on every segment path.** `Segment.encrypt*` rejects
   plaintexts longer than `segment_max`, and `Segment.decrypt*` rejects `ct||tag` whose

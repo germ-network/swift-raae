@@ -25,6 +25,12 @@ public enum Segment {
 		/// 64-bit value XORed into the nonce (§4.5.3); a larger index would silently
 		/// drop its top bit and collide with `index − 2^63`.
 		case indexTooLargeForDerivedMode(UInt64)
+		/// Derived-mode encryption on a write-once (`SEAL-RO-v1`) schedule with a
+		/// non-MRAE AEAD must go through ``PayloadEncryptor``: the §4.5.3.2 discipline
+		/// is one encryption per segment, and an unmetered second encryption at the
+		/// same position would reuse the segment's fixed nonce — catastrophic for
+		/// AES-GCM / ChaCha20-Poly1305 (keystream reuse and forgeability).
+		case writeOnceRequiresMeteredEncryptor
 		/// The segment plaintext (on decrypt: the plaintext length implied by
 		/// `len(ct||tag) − Nt`) exceeded the schedule's `segment_max` (§4.4). Enforced on
 		/// both paths: the §5.9.7.4 per-segment budget assumes at most `segment_max`
@@ -133,7 +139,32 @@ public enum Segment {
 
 	/// Encrypt one segment in derived nonce mode, returning `ct || tag`. No nonce is
 	/// stored; it is recomputed from `nonce_base` and the position.
+	///
+	/// On a write-once (`SEAL-RO-v1`) schedule with a non-MRAE AEAD this entry point
+	/// refuses to encrypt (``SegmentError/writeOnceRequiresMeteredEncryptor``): §4.5.3.2
+	/// licenses that pairing only under a one-encryption-per-segment discipline, which an
+	/// unmetered static cannot uphold. Use
+	/// ``PayloadEncryptor/encryptDerived(position:associatedData:plaintext:)``, which
+	/// meters the discipline and hard-stops rewrites even under ``BudgetPolicy/warn``.
 	public static func encryptDerived(
+		schedule: PayloadSchedule,
+		position: SegmentPosition,
+		associatedData: [UInt8],
+		plaintext: [UInt8]
+	) throws -> [UInt8] {
+		guard !(schedule.isWriteOnceProfile && !schedule.aead.isMRAE) else {
+			throw SegmentError.writeOnceRequiresMeteredEncryptor
+		}
+		return try encryptDerivedUnmetered(
+			schedule: schedule, position: position, associatedData: associatedData,
+			plaintext: plaintext)
+	}
+
+	/// The unmetered derived-mode encryption core. Internal: ``PayloadEncryptor`` calls
+	/// this after charging the §5.9 budget — the metering is what licenses the
+	/// write-once non-MRAE pairing; every external caller goes through
+	/// ``encryptDerived(schedule:position:associatedData:plaintext:)``, which gates it.
+	static func encryptDerivedUnmetered(
 		schedule: PayloadSchedule,
 		position: SegmentPosition,
 		associatedData: [UInt8],
