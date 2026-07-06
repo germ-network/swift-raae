@@ -21,6 +21,21 @@ public enum Segment {
 		case nonceTooShortForDerivedMode(Int)
 		/// Derived-mode operation attempted without a `nonce_base` in the schedule.
 		case missingNonceBase
+		/// The segment plaintext (on decrypt: the plaintext length implied by
+		/// `len(ct||tag) − Nt`) exceeded the schedule's `segment_max` (§4.4). Enforced on
+		/// both paths: the §5.9.7.4 per-segment budget assumes at most `segment_max`
+		/// octets per segment, so an oversized segment would silently weaken the metered
+		/// data-volume bound.
+		case exceedsSegmentMax(length: Int, segmentMax: UInt32)
+	}
+
+	/// Reject a segment longer than the schedule's `segment_max` (§4.4). `length` is the
+	/// plaintext length (on decrypt, implied by the ciphertext length minus `Nt`).
+	private static func checkSegmentMax(length: Int, schedule: PayloadSchedule) throws {
+		guard length <= schedule.payloadInfo.segmentMax else {
+			throw SegmentError.exceedsSegmentMax(
+				length: length, segmentMax: schedule.payloadInfo.segmentMax)
+		}
 	}
 
 	/// `segment_aad(i, is_final, A_i)` for the random nonce mode (§4.4.2, Table 2).
@@ -77,6 +92,7 @@ public enum Segment {
 		plaintext: [UInt8],
 		nonce: [UInt8]
 	) throws -> (nonce: [UInt8], ciphertext: [UInt8]) {
+		try checkSegmentMax(length: plaintext.count, schedule: schedule)
 		let key = schedule.segmentKey(index: position.index)
 		let aad = aadRandomMode(
 			position: position, associatedData: associatedData, kdf: schedule.kdf)
@@ -93,6 +109,8 @@ public enum Segment {
 		nonce: [UInt8],
 		ciphertext: [UInt8]
 	) throws -> [UInt8] {
+		try checkSegmentMax(
+			length: ciphertext.count - schedule.aead.tagLength, schedule: schedule)
 		let key = schedule.segmentKey(index: position.index)
 		let aad = aadRandomMode(
 			position: position, associatedData: associatedData, kdf: schedule.kdf)
@@ -108,6 +126,7 @@ public enum Segment {
 		associatedData: [UInt8],
 		plaintext: [UInt8]
 	) throws -> [UInt8] {
+		try checkSegmentMax(length: plaintext.count, schedule: schedule)
 		guard let nonceBaseKey = schedule.nonceBase else {
 			throw SegmentError.missingNonceBase
 		}
@@ -126,6 +145,8 @@ public enum Segment {
 		associatedData: [UInt8],
 		ciphertext: [UInt8]
 	) throws -> [UInt8] {
+		try checkSegmentMax(
+			length: ciphertext.count - schedule.aead.tagLength, schedule: schedule)
 		guard let nonceBaseKey = schedule.nonceBase else {
 			throw SegmentError.missingNonceBase
 		}

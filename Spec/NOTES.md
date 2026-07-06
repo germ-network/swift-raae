@@ -191,6 +191,11 @@ vector's fixed nonce to pin the ciphertext in both directions.
   `PayloadEncryptor` meters it for a single live writer (per-segment budget = one
   encryption, per-epoch-key budget = the epoch's `2^r` indices).
 - **CEK length is fixed at 32 octets** and validated in `PayloadSchedule.init`.
+- **`segment_max` is enforced on every segment path.** `Segment.encrypt*` rejects
+  plaintexts longer than `segment_max`, and `Segment.decrypt*` rejects `ct||tag` whose
+  implied plaintext (`len − Nt`) exceeds it, before any AEAD work. The §5.9.7.4
+  per-segment budget divides by the `segment_max` block count `L`, so an oversized
+  segment would silently weaken the metered data-volume bound while appearing metered.
 - **Verify-before-decrypt is the recommended/safe path** (§4.6, §4.9.1.2), enforced by
   convention (a documented MUST), not by the type system — the public `init` can still
   build an unverified schedule. `PayloadSchedule.startDecrypt(...)` re-derives at the
