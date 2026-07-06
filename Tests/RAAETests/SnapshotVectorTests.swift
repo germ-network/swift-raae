@@ -37,8 +37,8 @@ struct SnapshotVectorTests {
 		#expect(hash.verify(snapshot: value, segments: [(UInt64(0), tag)]))
 	}
 
-	@Test func twoSegmentSnapshotMatchesE7AndDetectsTampering() throws {
-		let v = try Vectors.load("E7")
+	@Test func twoSegmentSnapshotMatchesE9AndDetectsTampering() throws {
+		let v = try Vectors.load("E9")
 		let hash = MaskedMultisetHash(schedule: try Vectors.schedule(from: v))
 		let segs = (v["segments"] as! [[String: Any]]).map(tagPair)
 		let snap = v["snapshot"] as! [String: Any]
@@ -63,8 +63,8 @@ struct SnapshotVectorTests {
 		#expect(!hash.verify(snapshot: value, segments: segs + [(UInt64(2), segs[0].tag)]))
 	}
 
-	@Test func rewriteUpdatesSnapshotMatchingE14() throws {
-		let v = try Vectors.load("E14")
+	@Test func rewriteUpdatesSnapshotMatchingE16() throws {
+		let v = try Vectors.load("E16")
 		let schedule = try Vectors.schedule(from: v)
 		let hash = MaskedMultisetHash(schedule: schedule)
 		let segs = (v["segments"] as! [[String: Any]]).map(tagPair)
@@ -107,8 +107,8 @@ struct SnapshotVectorTests {
 		#expect(hash.verify(snapshot: newValue, segments: [(UInt64(0), newTag), segs[1]]))
 	}
 
-	@Test func negativeSnapVerifyRejectsTamperedAccumulatorE17() throws {
-		let v = try Vectors.load("E14")
+	@Test func negativeSnapVerifyRejectsTamperedAccumulatorE20() throws {
+		let v = try Vectors.load("E16")
 		let hash = MaskedMultisetHash(schedule: try Vectors.schedule(from: v))
 		let neg = v["negative_snapverify"] as! [String: Any]
 		let snap = v["snapshot"] as! [String: Any]

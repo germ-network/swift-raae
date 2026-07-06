@@ -152,8 +152,8 @@ struct UsageLimitsTests {
 	}
 
 	@Test func meteredOutputIsByteIdenticalToStatic() throws {
-		// Run an E.15.1-style derived encryption through the encryptor and the raw static.
-		let v = try Vectors.load("E15")
+		// Run an E.17.1-style derived encryption through the encryptor and the raw static.
+		let v = try Vectors.load("E17")
 		let sched = try Vectors.schedule(from: v)
 		let seg = (v["segments"] as! [[String: Any]])[0]
 		let pos = SegmentPosition(index: 0, isFinal: false)

@@ -11,7 +11,7 @@
 /// > unstable and the implementation is unaudited — not for production use.
 public enum RAAE {
 	/// The draft revision this package targets. See `Spec/SOURCE.md`.
-	public static let targetedDraft = "draft-sullivan-cfrg-raae (2026-06-26 snapshot)"
+	public static let targetedDraft = "draft-sullivan-cfrg-raae (2026-07-06 snapshot)"
 
 	/// Package version.
 	public static let version = "0.0.1"

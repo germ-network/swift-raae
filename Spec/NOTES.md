@@ -1,7 +1,8 @@
 # Normative transcription — KDF layer (Stage 1)
 
-Transcribed from the vendored draft snapshot (see `SOURCE.md`, 2026-06-26). Section
-numbers refer to that snapshot and may drift. **This is the authority for the code, not
+Transcribed from the vendored draft snapshot (see `SOURCE.md`; originally 2026-06-26,
+vector numbering updated to the 2026-07-06 refresh). Section numbers refer to that
+snapshot and may drift. **This is the authority for the code, not
 the plan's prose** (the plan was written from a summary and had label errors — noted
 below).
 
@@ -92,7 +93,8 @@ other field (no separate extra prefix).
 `0x0003` HKDF-SHA-512 (Nh 64), `0x0013` TurboSHAKE-256 (Nh 64, one-step).
 
 > ⚠️ The summary-based plan mis-stated these: it had ChaCha at `0x0003` and HKDF-SHA-512
-> at `0x0002`. The E.3 ChaCha vector caught both. Always take ids from this table.
+> at `0x0002`. The E.5 ChaCha vector (E.3 in the 2026-06-26 snapshot) caught both.
+> Always take ids from this table.
 
 ### Derived nonce (§4.5.3)
 
@@ -149,7 +151,7 @@ segment_aad(i, is_final, A_i):
 `C_i = AEAD.Encrypt(segment_key(i), nonce(i), segment_aad(i,is_final,A_i), P_i)`, split
 into `ct_i || tag_i`. Decrypt reverses it; AEAD auth failure ⇒ decryption error.
 
-### Masked multiset hash snapshot (§4.7.4) — verified vs E.1/E.7/E.14
+### Masked multiset hash snapshot (§4.7.4) — verified vs E.1/E.9/E.16.1
 
 ```
 contrib(i)   = KDF(protocol_id, "acc_contrib",  [snap_key], [uint64(i), tag(i)], Nh)

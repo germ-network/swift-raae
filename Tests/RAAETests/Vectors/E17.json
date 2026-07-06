@@ -1,6 +1,6 @@
 {
-	"name": "E.15.1 Two Segment, AES-256-GCM-SIV, HKDF-SHA-256, 65536 (Derived, Rewrite)",
-	"source": "draft-sullivan-cfrg-raae Appendix E.15.1 (2026-06-26 snapshot)",
+	"name": "E.17.1 Two Segment, AES-256-GCM-SIV, HKDF-SHA-256, 65536 (Rewrite)",
+	"source": "draft-sullivan-cfrg-raae Appendix E.17.1 (2026-07-06 snapshot)",
 	"protocol_id": "SEAL-RW-v1",
 	"cek_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	"payload_info": {
