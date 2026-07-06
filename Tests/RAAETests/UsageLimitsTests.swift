@@ -52,9 +52,10 @@ struct UsageLimitsTests {
 	@Test func writeOnceDerivedBudgets() throws {
 		// Non-MRAE derived is only constructible under SEAL-RO-v1 (§4.5.3.2); the
 		// budget is the write-once discipline itself: one encryption per segment,
-		// and the 2^r segment indices an epoch key covers.
+		// and the 2^r segment indices an epoch key covers. Table 13 pins RO to
+		// snap_id 0x0000.
 		let info = PayloadInfo(
-			aeadID: 0x0002, segmentMax: 16384, kdfID: 0x0001, snapID: 0x0001,
+			aeadID: 0x0002, segmentMax: 16384, kdfID: 0x0001, snapID: SnapID.none,
 			nonceMode: .derived, epochLength: 3,
 			salt: [UInt8](repeating: 0x04, count: 32))
 		let sched = try PayloadSchedule(
@@ -68,7 +69,7 @@ struct UsageLimitsTests {
 
 	@Test func writeOnceEncryptorRejectsRewrite() throws {
 		let info = PayloadInfo(
-			aeadID: 0x0002, segmentMax: 16384, kdfID: 0x0001, snapID: 0x0001,
+			aeadID: 0x0002, segmentMax: 16384, kdfID: 0x0001, snapID: SnapID.none,
 			nonceMode: .derived, epochLength: 1,
 			salt: [UInt8](repeating: 0x04, count: 32))
 		let sched = try PayloadSchedule(

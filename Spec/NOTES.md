@@ -237,6 +237,10 @@ vector's fixed nonce to pin the ciphertext in both directions.
   segment's fixed nonce. Decryption is ungated. Cross-process/multi-writer discipline
   (seeding counters via `persistableState`) remains the host's obligation.
 - **CEK length is fixed at 32 octets** and validated in `PayloadSchedule.init`.
+- **Profile tuples (Table 13) are enforced in `PayloadSchedule.init`**: SEAL-RW-v1
+  requires `snap_id 0x0001`; SEAL-RO-v1 requires derived nonce + `snap_id 0x0000`
+  (`invalidProfileTuple`). Unknown protocol IDs are tuple-unconstrained (custom
+  profiles carry their own rules) but keep the strict MRAE gate for derived mode.
 - **`nonce_mode` is enforced on every segment path.** `Segment.encrypt/decryptRandom`
   require a random-mode schedule and `encrypt/decryptDerived` a derived-mode one
   (`nonceModeMismatch`); the mode is committed into the key schedule, so mixing modes

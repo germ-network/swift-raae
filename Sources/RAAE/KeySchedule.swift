@@ -58,6 +58,13 @@ public struct PayloadSchedule {
 		/// rejected like unknown `aead_id`/`kdf_id` — the field is committed into the
 		/// KDF, so silently accepting one would bind parameters this build cannot honor.
 		case unsupportedSnapID(UInt16)
+		/// The `(nonce_mode, snap_id)` tuple is not valid for the named profile
+		/// (§4.10.2, Table 13): `SEAL-RW-v1` requires `snap_id 0x0001` (random nonce,
+		/// or derived with an MRAE AEAD); `SEAL-RO-v1` pins derived nonce +
+		/// `snap_id 0x0000`. An encryptor MUST set a valid tuple and a decryptor MUST
+		/// reject an invalid one. Unknown protocol IDs carry their own profile rules
+		/// and are not constrained here.
+		case invalidProfileTuple(nonceMode: PayloadInfo.NonceMode, snapID: UInt16)
 		case commitmentTooShort(Int)
 		/// Commitment length exceeded what the KDF can emit / the framing can encode
 		/// (`min(255·Nh, 0xFFFE)`). Rejected up front so an over-long (e.g. attacker-supplied)
@@ -125,6 +132,26 @@ public struct PayloadSchedule {
 		let isWriteOnce = protocolID == ProtocolID.immutable
 		guard !(payloadInfo.nonceMode == .derived && !aead.isMRAE && !isWriteOnce) else {
 			throw ScheduleError.derivedModeRequiresMRAE(payloadInfo.aeadID)
+		}
+		// §4.10.2 Table 13: the named profiles admit only certain (nonce_mode,
+		// snap_id) tuples — SEAL-RO-v1 pins derived + snap none (write-once; the
+		// finality bit is the truncation signal), SEAL-RW-v1 requires the masked
+		// multiset hash so every rewritable object carries whole-object integrity.
+		// A decryptor MUST reject an invalid tuple; unknown protocol IDs define
+		// their own profile rules and are not constrained here.
+		if isWriteOnce {
+			guard payloadInfo.nonceMode == .derived, payloadInfo.snapID == SnapID.none
+			else {
+				throw ScheduleError.invalidProfileTuple(
+					nonceMode: payloadInfo.nonceMode, snapID: payloadInfo.snapID
+				)
+			}
+		} else if protocolID == ProtocolID.mutable {
+			guard payloadInfo.snapID == SnapID.maskedMultisetHash else {
+				throw ScheduleError.invalidProfileTuple(
+					nonceMode: payloadInfo.nonceMode, snapID: payloadInfo.snapID
+				)
+			}
 		}
 		let commitLen = commitmentLength ?? kdf.outputSize
 		guard commitLen >= Self.minCommitmentLength else {

@@ -18,9 +18,18 @@ struct SnapIDValidationTests {
 	}
 
 	@Test func knownSnapIDsAreAccepted() throws {
-		// 0x0000 none, 0x0001 masked multiset hash (Table 9).
-		_ = try makeSchedule(snapID: SnapID.none)
+		// 0x0000 none, 0x0001 masked multiset hash (Table 9). Each is accepted
+		// under the profile whose Table-13 tuple admits it: MMH under SEAL-RW-v1,
+		// none under SEAL-RO-v1 (derived nonce; ProfileTupleTests covers the
+		// cross-pairings).
 		_ = try makeSchedule(snapID: SnapID.maskedMultisetHash)
+		let roInfo = PayloadInfo(
+			aeadID: 0x0002, segmentMax: 16384, kdfID: 0x0001, snapID: SnapID.none,
+			nonceMode: .derived, epochLength: 1,
+			salt: [UInt8](repeating: 0x04, count: 32))
+		_ = try PayloadSchedule(
+			protocolID: ProtocolID.immutable,
+			cek: [UInt8](repeating: 0xAA, count: 32), payloadInfo: roInfo)
 		#expect(SuiteRegistry.isKnownSnapID(SnapID.none))
 		#expect(SuiteRegistry.isKnownSnapID(SnapID.maskedMultisetHash))
 	}
