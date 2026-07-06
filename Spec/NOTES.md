@@ -77,7 +77,8 @@ other field (no separate extra prefix).
   `0x0010` AEGIS-128L, `0x0011` AEGIS-256 (+ AES-256-GCM-SIV for MRAE).
   For all Table-7 AEADs: `C_i = ct_i || tag_i`, tag is the final `Nt` octets.
 - KDF: `0x0001` HKDF-SHA-256, `0x0002` HKDF-SHA-512, `0x0013` TurboSHAKE-256.
-- `snap_id` (Table 9): `0x0000` none, `0x0001` masked multiset hash.
+- `snap_id` (Table 9): `0x0000` none, `0x0001` masked multiset hash. Unknown values
+  are rejected in `PayloadSchedule.init` (like unknown `aead_id`/`kdf_id`).
 - `nonce_mode` (Table 10): `0x00` random, `0x01` derived.
 
 **Table 7 (AEAD) — verified IANA code points, NOT sequential:**

@@ -50,6 +50,10 @@ public struct PayloadSchedule {
 	public enum ScheduleError: Error, Equatable {
 		case unsupportedAEAD(UInt16)
 		case unsupportedKDF(UInt16)
+		/// `snap_id` was not a known Table-9 code point (``SnapID``). Unknown values are
+		/// rejected like unknown `aead_id`/`kdf_id` — the field is committed into the
+		/// KDF, so silently accepting one would bind parameters this build cannot honor.
+		case unsupportedSnapID(UInt16)
 		case commitmentTooShort(Int)
 		/// Commitment length exceeded what the KDF can emit / the framing can encode
 		/// (`min(255·Nh, 0xFFFE)`). Rejected up front so an over-long (e.g. attacker-supplied)
@@ -103,6 +107,9 @@ public struct PayloadSchedule {
 		}
 		guard let kdf = SuiteRegistry.kdf(id: payloadInfo.kdfID) else {
 			throw ScheduleError.unsupportedKDF(payloadInfo.kdfID)
+		}
+		guard SuiteRegistry.isKnownSnapID(payloadInfo.snapID) else {
+			throw ScheduleError.unsupportedSnapID(payloadInfo.snapID)
 		}
 		// Derived nonce mode fixes each segment's nonce, so a rewrite would reuse it.
 		// §4.5.3.2: with a non-MRAE AEAD the mode MUST be confined to a write-once
