@@ -29,6 +29,14 @@ public struct PayloadSchedule {
 	/// Minimum commitment length (§4.6).
 	public static let minCommitmentLength = 16
 
+	/// Largest commitment length a given KDF can safely produce: bounded by HKDF's `255·Nh`
+	/// output limit and the uint16 framing of the output length. A commitment never needs to
+	/// exceed `Nh`; this ceiling exists only to reject over-long values with a typed error
+	/// rather than trapping in the KDF.
+	static func maxCommitmentLength(for kdf: KeyDerivation) -> Int {
+		min(255 * kdf.outputSize, Framing.maxLiteralLength)
+	}
+
 	/// The draft fixes the CEK at 32 octets (§4.5).
 	public static let cekLength = 32
 
@@ -36,6 +44,11 @@ public struct PayloadSchedule {
 		case unsupportedAEAD(UInt16)
 		case unsupportedKDF(UInt16)
 		case commitmentTooShort(Int)
+		/// Commitment length exceeded what the KDF can emit / the framing can encode
+		/// (`min(255·Nh, 0xFFFE)`). Rejected up front so an over-long (e.g. attacker-supplied)
+		/// `publishedCommitment` cannot trap in `Bytes.uint16` / HKDF `expand` before the
+		/// §4.6 verification runs.
+		case commitmentTooLong(Int)
 		/// CEK was not exactly `cekLength` (32) octets.
 		case invalidCEKLength(Int)
 		/// Derived nonce mode was selected with a non-MRAE AEAD. A rewrite would reuse
@@ -61,7 +74,9 @@ public struct PayloadSchedule {
 	///   (or call ``verifyCommitment(_:)``) before decrypting any segment — the commitment is
 	///   SEAL's only key/parameter-committing defense (§4.6), and AES-GCM / ChaCha20-Poly1305
 	///   are not key-committing on their own.
-	/// - Parameter commitmentLength: defaults to the KDF's `Nh`; must be ≥ 16.
+	/// - Parameter commitmentLength: defaults to the KDF's `Nh`; must be in
+	///   `[16, min(255·Nh, 0xFFFE)]`. Out-of-range values throw
+	///   ``ScheduleError/commitmentTooShort(_:)`` / ``ScheduleError/commitmentTooLong(_:)``.
 	public init(
 		protocolID: [UInt8],
 		cek: [UInt8],
@@ -86,6 +101,16 @@ public struct PayloadSchedule {
 		let commitLen = commitmentLength ?? kdf.outputSize
 		guard commitLen >= Self.minCommitmentLength else {
 			throw ScheduleError.commitmentTooShort(commitLen)
+		}
+		// Upper-bound the commitment length. HKDF `expand` emits at most 255·Nh octets and
+		// framing encodes the output length as a uint16, so a larger value would trap in
+		// `Bytes.uint16` (> 0xFFFF) or the HKDF iteration count (> 255·Nh) *before* the §4.6
+		// verification runs — a reachable panic on the verify-before-decrypt path, since
+		// `startDecrypt` derives `commitmentLength` from the (untrusted) published commitment.
+		// A commitment beyond Nh has no security benefit (it truncates one KDF block), so
+		// reject it with a typed error instead of aborting the process.
+		guard commitLen <= Self.maxCommitmentLength(for: kdf) else {
+			throw ScheduleError.commitmentTooLong(commitLen)
 		}
 
 		self.protocolID = protocolID
@@ -137,7 +162,10 @@ public struct PayloadSchedule {
 	///
 	/// The commitment length is taken from `publishedCommitment` (callers must store the
 	/// full `commitment_length`-octet value). A short value (< 16 octets) is rejected by
-	/// `init` with ``ScheduleError/commitmentTooShort(_:)``. Truncation cannot silently
+	/// `init` with ``ScheduleError/commitmentTooShort(_:)``, and an over-long one (beyond the
+	/// KDF's `255·Nh` / framing limit) with ``ScheduleError/commitmentTooLong(_:)`` — so a
+	/// malformed published commitment fails as a typed error, never a process abort in the
+	/// KDF. Truncation cannot silently
 	/// downgrade the binding: the output length is bound into the KDF, so a truncated
 	/// commitment re-derives to a different value and fails as `commitmentMismatch`. A caller
 	/// who knows the authored `commitment_length` out of band may pass
