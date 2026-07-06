@@ -49,19 +49,19 @@ public struct SEALConfiguration {
         profile: SEALProfile,
         aeadID: UInt16, kdfID: UInt16,
         segmentMax: UInt32 = 65536,
-        epochLength: UInt8 = 0,
-        snapshot: SnapshotChoice = .profileDefault
+        epochLength: UInt8 = 0
     ) throws
 }
 ```
 
 - **`nonce_mode` is not a parameter.** It is derived from `(profile, AEAD)` per the
   spec: RO ⇒ derived (any AEAD — write-once keeps each nonce unique); RW ⇒ random,
-  or derived only when the AEAD is MRAE. F6's mode-mixing guard becomes structurally
-  unreachable.
-- **`snap_id` is pinned per profile** (§4.10.2): RW requires the masked multiset hash
-  (rollback/substitution detection on rewrite); RO may choose none or MMH. This adds
-  an enforcement the current core lacks (RW + snap none is constructible today).
+  or derived when the AEAD is MRAE (the Table-9 per-AEAD default). F6's mode-mixing
+  guard becomes structurally unreachable.
+- **`snap_id` is not a parameter either.** Table 13 (transcribed in `NOTES.md`) fully
+  determines it: RW ⇒ the masked multiset hash, RO ⇒ none. The tuple MUST is now
+  *also* enforced in the core (`ScheduleError.invalidProfileTuple`), so the engine
+  config is a convenience over a core guarantee, not the sole gate.
 - **`commitment_length` is pinned to `Nh`.** The core keeps the parameter for
   interop with truncating writers.
 - Init validates everything currently validated by `PayloadSchedule.init` plus the
@@ -76,7 +76,8 @@ public struct SEALConfiguration {
 **Write path (`StartEnc` → `EncSeg`* → snapshot):**
 
 ```swift
-let writer = try config.startEncryption(cek: cek)     // salt generated internally
+let writer = try config.startEncryption(cek: cek, globalAssociatedData: g)
+                                                      // salt generated internally
 let seg    = try writer.encrypt(plaintext,
                  at: SegmentPosition(index: 0, isFinal: true),
                  associatedData: [])                   // -> SealedSegment
@@ -85,7 +86,9 @@ let object = try writer.finalize()                     // -> SealedObjectHeader 
 
 - `startEncryption` generates the 32-octet salt internally (via
   `SystemRandomNumberGenerator`) — the salt-uniqueness host obligation (F7) becomes
-  construction. A `SEAL.generateCEK()` helper vends a zeroizing CEK.
+  construction. A `SEAL.generateCEK()` helper vends a zeroizing CEK. The optional
+  `globalAssociatedData` is the raAE `G` (§3.2/§4.6): bound into the commitment,
+  never stored, re-supplied by the decryptor.
 - `SealedSegment { position, nonceMetadata: [UInt8]?, ciphertext }` — nonce metadata
   present only in random mode (derived mode stores nothing, recomputed on open). **No
   nonce parameters anywhere** (F5); a later stage upgrades generation to the hedged
@@ -101,7 +104,8 @@ let object = try writer.finalize()                     // -> SealedObjectHeader 
 **Read path (`StartDec` → `SnapVerify` → `DecSeg`*):**
 
 ```swift
-let reader = try config.startDecryption(cek: cek, header: header)   // commitment verified — only constructor
+let reader = try config.startDecryption(cek: cek, header: header, globalAssociatedData: g)
+                                                                    // commitment verified — only constructor
 try reader.verify(snapshot: snapshot, segments: presentTags)        // SnapVerify + highest-index-final check
 let pt     = try reader.decrypt(seg, associatedData: [])
 ```
@@ -110,8 +114,10 @@ let pt     = try reader.decrypt(seg, associatedData: [])
   "documented MUST" becomes the type system. `verify(snapshot:)` implements the full
   §4.9.1.2 read check including the finality rule ("reject if the highest-indexed
   segment lacks is_final = 1"), which nothing in the current package enforces.
-  For `snap_id = none` (RO option) the verify step is absent by type: the no-snapshot
-  reader simply lacks it.
+  Under RO (`snap_id = none`) the snapshot verify is absent by type, but the
+  finality rule still applies — §4.10.2: "truncation detection rests on the finality
+  bit alone" — so the RO reader keeps a completeness check over the claimed
+  positions (cryptographically confirmed when the final segment is decrypted).
 - Freshness/rollback remains a host obligation (spec: snapshot proves set integrity,
   not recency) — documented on `verify`, unchanged from F7.
 
@@ -158,7 +164,7 @@ own containers. So:
 |---|---|---|
 | F1 segment_max | typed-error guards | writer validates; container chunks |
 | F2 index bound | reject ≥ 2^63 (spec MUST) | reject ≥ 2^48 (engine cap) |
-| F3 snap_id | registry rejection | profile pins tuple; RW requires MMH (new) |
+| F3 snap_id | registry + Table-13 tuple rejection (core) | `snap_id` not a parameter at all |
 | F4 write-once | gate + hard metering | RO writer has no rewrite op; rewriter unconstructible for RO |
 | F5 nonce param | metered path owns nonce | no nonce params exist; hedged gen later |
 | F6 mode mixing | `nonceModeMismatch` | `nonce_mode` not a parameter |
@@ -187,12 +193,20 @@ own containers. So:
 
 ## 5. Prerequisite and open spec checks
 
-**Vendor the HTML snapshot first** (the existing `SOURCE.md` TODO). Two live-URL
-reads of §4.10.2/§4.12 disagreed in detail (does RO admit the MMH snapshot, or must
-it omit the authenticator? are the named instantiations enumerated, and under which
-names?). The profile table and §4.12 tuples must be transcribed into `NOTES.md` from
-a pinned snapshot before Stage B, same discipline as the existing KDF transcription.
+**Resolved against the vendored snapshot** (`Spec/draft-2026-07-06.html`; see the
+Table 13/15 transcriptions in `NOTES.md` and the `G` drift note in `SOURCE.md`):
 
-Also confirm: Appendix D hedged-nonce normativity (MUST/SHOULD/MAY) — determines
-whether stage-D hedging is optional; and whether §4.9.1.2's finality rule applies
-when `snap_id = none` (affects the no-snapshot reader).
+- §4.10.2 Table 13: RO pins derived + `snap_id 0x0000`; RW requires `0x0001`.
+  Enforced in the core (`invalidProfileTuple`); the engine config never exposes the
+  choice.
+- §4.12 Table 15: five named instantiations (attachment/simple/memory/disk/compact);
+  each *binds a serialization layout*, so an engine scheme preset without its layout
+  is a parameter preset, not a claimable named instantiation — naming must say so
+  until Stage D ships the layout.
+- §4.9.1.2 finality rule applies in both profiles (under RO it is the sole
+  truncation defense).
+- §4.6 `G`: discovered via snapshot-vs-vector diffing, now implemented in the core
+  (commitment binds `[...payload_info, G]`; E.2 pinned).
+
+**Still open**: Appendix D hedged-nonce normativity (MUST/SHOULD/MAY) — determines
+whether Stage-D hedging is optional or required for random mode.

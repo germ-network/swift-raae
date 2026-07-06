@@ -35,9 +35,11 @@ public enum SEALProfile: Equatable, Sendable {
 /// reject set for cross-implementation symmetry and platform safety.
 public enum SEALLimits {
 	/// Maximum segment count / exclusive segment-index bound, applied in both nonce
-	/// modes. Stricter than the spec's derived-mode `index < 2^63` (§4.5.3.2):
-	/// 2^48 keeps the accept/reject set symmetric across implementations, cannot
-	/// overflow 32-bit `Int` arithmetic in hosts, and leaves headroom against future
-	/// wire changes. Unreachable by any real object.
+	/// modes. Stricter than the spec's derived-mode `index < 2^63` (§4.5.3.2): a
+	/// fixed 2^48 cap keeps the engine's accept/reject set identical across
+	/// implementations that adopt the same cap, leaves 15 bits of headroom below
+	/// the nonce encoding's own ceiling against future wire changes, and is
+	/// unreachable by any real object (2^48 segments of the minimum 4096-octet
+	/// `segment_max` is a septillion-octet object).
 	public static let maxSegments: UInt64 = 1 << 48
 }
