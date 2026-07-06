@@ -97,6 +97,44 @@ other field (no separate extra prefix).
 > at `0x0002`. The E.5 ChaCha vector (E.3 in the 2026-06-26 snapshot) caught both.
 > Always take ids from this table.
 
+## Profiles (§4.10.2, Table 13) — transcribed from the vendored snapshot
+
+| protocol_id  | nonce_mode        | snap_id  | mutability              |
+|--------------|-------------------|----------|-------------------------|
+| `SEAL-RW-v1` | random or derived | `0x0001` | rewrite/extend/truncate |
+| `SEAL-RO-v1` | derived           | `0x0000` | write-once              |
+
+- "An encryptor MUST set payload_info to a (nonce_mode, snap_id) tuple that is valid
+  for its protocol_id, and a decryptor MUST reject any object whose tuple is not."
+- RW **requires** the masked multiset hash (`0x0001`); derived nonce under RW requires
+  an MRAE AEAD. RO **pins** derived nonce + `snap_id 0x0000` (no snapshot runs; the
+  finality bit is the only truncation signal, §4.9.1.2) and admits any AEAD because
+  write-once keeps each derived nonce unique. Write-once is normative: "an encryptor
+  MUST NOT rewrite a segment once it has been written."
+- Unknown protocol IDs: the spec defines tuples only for these two; custom profiles
+  carry their own rules (we stay strict: MRAE required for derived).
+
+## Named instantiations (§4.12, Table 15)
+
+Each row fixes profile/segment_max/nonce_mode/epoch/layout; the cipher suite
+(aead_id, kdf_id) stays caller-chosen, e.g. `SEAL-simple(aead_id, kdf_id)`.
+snap_id follows the profile; `commitment_length = Nh`; fresh 32-octet salt per object.
+
+| Name            | Profile    | segment_max | nonce_mode | epoch | layout  |
+|-----------------|------------|-------------|------------|-------|---------|
+| SEAL-attachment | SEAL-RO-v1 | 65536       | derived    | 32    | linear  |
+| SEAL-simple     | SEAL-RW-v1 | 65536       | random     | 16    | linear  |
+| SEAL-memory     | SEAL-RW-v1 | 16384       | random     | 16    | aligned |
+| SEAL-disk       | SEAL-RW-v1 | 16384       | random     | 16    | split   |
+| SEAL-compact    | SEAL-RW-v1 | 16384       | derived    | 16    | aligned |
+
+- SEAL-compact (mutable + derived) requires an MRAE AEAD; the others admit any.
+- 256-bit-nonce suites (AEGIS) use epoch_length 63 regardless of the row; a
+  referencing protocol MAY override the epoch.
+- Serialization layouts (§4.11: linear, aligned, split) are **not mandated** by the
+  parameterized construction — each named instantiation binds one, and the consuming
+  protocol pins remaining byte-level details.
+
 ### Derived nonce (§4.5.3)
 
 `nonce(i) = nonce_base XOR ((i<<1)|is_final)`, where the value is encoded big-endian and

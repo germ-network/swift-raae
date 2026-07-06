@@ -39,6 +39,8 @@ On any spec refresh: re-capture the HTML, re-extract Appendix E vectors into
 The Appendix E test vectors are the conformance oracle for every stage. They are
 extracted (once, from this snapshot) into `Tests/RAAETests/Vectors/*.json`.
 
-> TODO (Stage 1): download the HTML snapshot into `Spec/draft-2026-07-06.html` and
-> extract Appendix E vectors to JSON. Left out of the initial commit to avoid
-> vendoring a large HTML blob before the extraction tooling exists.
+The HTML snapshot is vendored at `Spec/draft-2026-07-06.html` (captured 2026-07-06,
+552 KB); the Appendix E vectors were extracted from it into
+`Tests/RAAETests/Vectors/*.json`. Normative transcriptions in `NOTES.md` (KDF layer,
+profiles Table 13, named instantiations Table 15) are made against this snapshot,
+never against the living `-latest` URL.
