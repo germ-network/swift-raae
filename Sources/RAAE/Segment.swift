@@ -20,7 +20,15 @@ public enum Segment {
 		/// Derived nonce mode needs `Nn >= 8` to hold `(i<<1)|is_final`.
 		case nonceTooShortForDerivedMode(Int)
 		/// Derived-mode operation attempted without a `nonce_base` in the schedule.
+		/// Defensive: unreachable through the public API now that every path checks
+		/// ``nonceModeMismatch(scheduleMode:)`` first (`nonce_base` exists iff the
+		/// schedule's mode is derived).
 		case missingNonceBase
+		/// The operation's nonce mode does not match the schedule's committed
+		/// `nonce_mode` (§4.4) — e.g. a random-mode encrypt on a derived-mode schedule.
+		/// Segments must be produced and consumed in the committed mode; mixing modes
+		/// under one schedule would emit objects that contradict their `payload_info`.
+		case nonceModeMismatch(scheduleMode: PayloadInfo.NonceMode)
 		/// Derived nonce mode needs `index < 2^63` so `(i<<1)|is_final` fits the
 		/// 64-bit value XORed into the nonce (§4.5.3); a larger index would silently
 		/// drop its top bit and collide with `index − 2^63`.
@@ -37,6 +45,17 @@ public enum Segment {
 		/// octets per segment, so an oversized segment would silently weaken the metered
 		/// data-volume bound.
 		case exceedsSegmentMax(length: Int, segmentMax: UInt32)
+	}
+
+	/// Reject an operation whose nonce mode differs from the schedule's committed
+	/// `nonce_mode` (§4.4).
+	private static func checkNonceMode(
+		_ expected: PayloadInfo.NonceMode, schedule: PayloadSchedule
+	) throws {
+		guard schedule.payloadInfo.nonceMode == expected else {
+			throw SegmentError.nonceModeMismatch(
+				scheduleMode: schedule.payloadInfo.nonceMode)
+		}
 	}
 
 	/// Reject a segment longer than the schedule's `segment_max` (§4.4). `length` is the
@@ -111,6 +130,7 @@ public enum Segment {
 		plaintext: [UInt8],
 		nonce: [UInt8]
 	) throws -> (nonce: [UInt8], ciphertext: [UInt8]) {
+		try checkNonceMode(.random, schedule: schedule)
 		try checkSegmentMax(length: plaintext.count, schedule: schedule)
 		let key = schedule.segmentKey(index: position.index)
 		let aad = aadRandomMode(
@@ -128,6 +148,7 @@ public enum Segment {
 		nonce: [UInt8],
 		ciphertext: [UInt8]
 	) throws -> [UInt8] {
+		try checkNonceMode(.random, schedule: schedule)
 		try checkSegmentMax(
 			length: ciphertext.count - schedule.aead.tagLength, schedule: schedule)
 		let key = schedule.segmentKey(index: position.index)
@@ -152,6 +173,7 @@ public enum Segment {
 		associatedData: [UInt8],
 		plaintext: [UInt8]
 	) throws -> [UInt8] {
+		try checkNonceMode(.derived, schedule: schedule)
 		guard !(schedule.isWriteOnceProfile && !schedule.aead.isMRAE) else {
 			throw SegmentError.writeOnceRequiresMeteredEncryptor
 		}
@@ -170,6 +192,7 @@ public enum Segment {
 		associatedData: [UInt8],
 		plaintext: [UInt8]
 	) throws -> [UInt8] {
+		try checkNonceMode(.derived, schedule: schedule)
 		try checkSegmentMax(length: plaintext.count, schedule: schedule)
 		guard let nonceBaseKey = schedule.nonceBase else {
 			throw SegmentError.missingNonceBase
@@ -189,6 +212,7 @@ public enum Segment {
 		associatedData: [UInt8],
 		ciphertext: [UInt8]
 	) throws -> [UInt8] {
+		try checkNonceMode(.derived, schedule: schedule)
 		try checkSegmentMax(
 			length: ciphertext.count - schedule.aead.tagLength, schedule: schedule)
 		guard let nonceBaseKey = schedule.nonceBase else {
