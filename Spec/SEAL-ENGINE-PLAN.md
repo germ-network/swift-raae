@@ -1,0 +1,198 @@
+# SEAL engine plan — two-product construction (RAAE core + SEAL engine)
+
+Splits the package into two layers: a granular, deterministic **RAAE core** (the
+existing byte-exact primitives) and a high-level **SEAL engine** designed against the
+draft spec (§3.2–3.3 abstract API, §4.9 procedures, §4.10.2 profiles). The goal:
+every misuse edge the 0.0.1 security review closed with runtime guards (F1–F6)
+becomes *unrepresentable* in the high-level API, while the granular core stays
+available — mostly out of sight — for vectors, interop tooling, and advanced hosts.
+
+## 1. Product structure
+
+One SwiftPM package, two library products:
+
+```
+swift-raae/
+  Sources/RAAE/    — core: granular, deterministic, byte-exact primitives (existing code)
+  Sources/SEAL/    — engine: spec-shaped lifecycle API; depends on RAAE
+```
+
+- `RAAE` (core) keeps the granular API: `PayloadInfo`, `PayloadSchedule`, `Segment`,
+  `MaskedMultisetHash`, `SuiteRegistry`, `ConstantTime`, the `AEAD`/`KeyDerivation`
+  protocols. It remains the conformance layer — all Appendix E KATs stay here.
+- `SEAL` (engine) is the recommended product. README/DocC lead with it; the core is
+  documented as "for implementers and vector tooling".
+
+**Access control is the structural mechanism.** Swift's `package` access level
+(SE-0386, tools 6.0 — already our floor) makes declarations visible across targets
+within the package but invisible to consumers:
+
+| Core surface | Access after split |
+|---|---|
+| Types, suite registry, schedule derivation, commitment verify, AAD builders, `derivedNonce`, accumulator/snapshot math | `public` (granular API) |
+| `Segment.encryptRandom(... nonce:)` (caller-supplied nonce), `Segment.encryptDerivedUnmetered` | `package` — reachable by SEAL and by the package's own test targets (pinned-nonce KATs), not by consumers |
+| `PayloadEncryptor` | deleted from core when the SEAL writer lands (Stage B); its metering logic moves inside the writer. It stays public through Stage A so the package never ships without a sanctioned random-mode encrypt path |
+
+Decrypt statics stay `public` in core (no misuse hazard), as do the F1–F6 typed-error
+guards — they become defense-in-depth beneath the engine.
+
+## 2. SEAL engine design (spec-shaped)
+
+### 2.1 Configuration — §4.10.2 profiles pin the tuple
+
+```swift
+public enum SEALProfile { case readOnly    // SEAL-RO-v1
+                          case readWrite } // SEAL-RW-v1
+
+public struct SEALConfiguration {
+    public init(
+        profile: SEALProfile,
+        aeadID: UInt16, kdfID: UInt16,
+        segmentMax: UInt32 = 65536,
+        epochLength: UInt8 = 0,
+        snapshot: SnapshotChoice = .profileDefault
+    ) throws
+}
+```
+
+- **`nonce_mode` is not a parameter.** It is derived from `(profile, AEAD)` per the
+  spec: RO ⇒ derived (any AEAD — write-once keeps each nonce unique); RW ⇒ random,
+  or derived only when the AEAD is MRAE. F6's mode-mixing guard becomes structurally
+  unreachable.
+- **`snap_id` is pinned per profile** (§4.10.2): RW requires the masked multiset hash
+  (rollback/substitution detection on rewrite); RO may choose none or MMH. This adds
+  an enforcement the current core lacks (RW + snap none is constructible today).
+- **`commitment_length` is pinned to `Nh`.** The core keeps the parameter for
+  interop with truncating writers.
+- Init validates everything currently validated by `PayloadSchedule.init` plus the
+  profile tuple; the config is otherwise opaque (schedule keys never touchable).
+- **Named instantiations (§4.12)**: a `SEALScheme` enum mirroring the spec's named
+  table — one-call construction where the scheme fixes profile/segmentMax/snapshot/
+  epoch. *Exact tuples must be read from the vendored spec snapshot before
+  implementation (see §5 prerequisite).*
+
+### 2.2 Lifecycle objects — §3.2/3.3 Table 1, §4.9 procedures
+
+**Write path (`StartEnc` → `EncSeg`* → snapshot):**
+
+```swift
+let writer = try config.startEncryption(cek: cek)     // salt generated internally
+let seg    = try writer.encrypt(plaintext,
+                 at: SegmentPosition(index: 0, isFinal: true),
+                 associatedData: [])                   // -> SealedSegment
+let object = try writer.finalize()                     // -> SealedObjectHeader + snapshot + state
+```
+
+- `startEncryption` generates the 32-octet salt internally (via
+  `SystemRandomNumberGenerator`) — the salt-uniqueness host obligation (F7) becomes
+  construction. A `SEAL.generateCEK()` helper vends a zeroizing CEK.
+- `SealedSegment { position, nonceMetadata: [UInt8]?, ciphertext }` — nonce metadata
+  present only in random mode (derived mode stores nothing, recomputed on open). **No
+  nonce parameters anywhere** (F5); a later stage upgrades generation to the hedged
+  plaintext-bound construction (spec Appendix D / RFC 8937).
+- The writer maintains the snapshot accumulator internally (`add(i, tag)` per §4.9.1.1)
+  and meters the §5.9 budget with **hard** caps (no warn-mode bypass; F4 semantics).
+  RO writer: write-once is structural — a second encrypt at a written index is an
+  error, and the RO writer type has no rewrite operation at all.
+- `finalize()` emits `SealedObjectHeader { salt, commitment, payloadInfo }`, the
+  masked snapshot value, and a `PersistableState` (budget counters + written-index
+  summary) for §5.9.5 freeze/resume. The raw accumulator never crosses the boundary.
+
+**Read path (`StartDec` → `SnapVerify` → `DecSeg`*):**
+
+```swift
+let reader = try config.startDecryption(cek: cek, header: header)   // commitment verified — only constructor
+try reader.verify(snapshot: snapshot, segments: presentTags)        // SnapVerify + highest-index-final check
+let pt     = try reader.decrypt(seg, associatedData: [])
+```
+
+- The *only* way to obtain a reader verifies the commitment (§4.6) — the current
+  "documented MUST" becomes the type system. `verify(snapshot:)` implements the full
+  §4.9.1.2 read check including the finality rule ("reject if the highest-indexed
+  segment lacks is_final = 1"), which nothing in the current package enforces.
+  For `snap_id = none` (RO option) the verify step is absent by type: the no-snapshot
+  reader simply lacks it.
+- Freshness/rollback remains a host obligation (spec: snapshot proves set integrity,
+  not recency) — documented on `verify`, unchanged from F7.
+
+**Rewrite path (RW only, `RewriteSeg` §4.9.2):**
+
+```swift
+var rw = try config.resumeWriting(cek: cek, header: header,
+             snapshot: snapshot, segments: presentTags, state: persisted)
+let (newSeg, newSnapshot) = try rw.rewrite(plaintext, at: pos, replacing: oldSeg)
+```
+
+- `resumeWriting` is only constructible for `.readWrite` — the F4 gate becomes a
+  missing method rather than a runtime error.
+- It verifies the presented snapshot first, then **recovers the raw accumulator by
+  unmasking internally** (`acc = wrapped_acc XOR mask(n_seg, tag)` — the schedule
+  holds `snap_key`, so no raw-acc persistence is ever needed). `rewrite` performs
+  RewriteSeg + `remove(i, old_tag)`/`add(i, new_tag)` + re-snapshot as one operation;
+  the accumulator API disappears from the consumer's world entirely (F7).
+
+### 2.3 Storage model
+
+The spec delegates serialization to the consuming protocol (§2.1; §4.11 layouts are
+informative), and our consumers (message attachments on iOS) store segments in their
+own containers. So:
+
+- The engine deals in **values** (`SealedObjectHeader`, `SealedSegment`, snapshot
+  bytes); the host owns placement. No io-stream surface.
+- A `SEALContainer` convenience (the §4.11 *Linear* layout: header ‖ segments ‖
+  snapshot in one `Data`, single-call seal/open of a whole payload) ships as sugar on
+  top — stage D, optional. Aligned layouts and armoring: out of scope until a
+  consumer needs them.
+
+### 2.4 Engine-level caps
+
+- `maxSegments = 2^48` at the SEAL layer, applied in both nonce modes — a
+  deliberately-stricter engine cap chosen for cross-implementation accept/reject
+  symmetry, 32-bit overflow safety, and headroom against future wire changes. The
+  core keeps the spec's exact §4.5.3.2 bound (index < 2^63, derived mode) so it
+  remains spec-conformant standalone. Engine = ecosystem contract, core = spec.
+
+## 3. Structural-guarantee map (review finding → construction)
+
+| Finding (0.0.1 fix) | Core (stays, defense-in-depth) | SEAL engine (structural) |
+|---|---|---|
+| F1 segment_max | typed-error guards | writer validates; container chunks |
+| F2 index bound | reject ≥ 2^63 (spec MUST) | reject ≥ 2^48 (engine cap) |
+| F3 snap_id | registry rejection | profile pins tuple; RW requires MMH (new) |
+| F4 write-once | gate + hard metering | RO writer has no rewrite op; rewriter unconstructible for RO |
+| F5 nonce param | metered path owns nonce | no nonce params exist; hedged gen later |
+| F6 mode mixing | `nonceModeMismatch` | `nonce_mode` not a parameter |
+| F7 salt/acc/replay docs | docs remain | salt generated internally; acc never exposed; finality check in `verify` |
+| F8 commitment floor | param kept, documented | pinned to `Nh` |
+| Verify-before-decrypt | `startDecrypt` convention | only reader constructor verifies |
+| Budgets (§5.9) | — (`PayloadEncryptor` removed) | built into writer, hard caps, persistable state |
+
+## 4. Staging
+
+- **Stage A — split & seams.** Add the `SEAL` target/product (profile type +
+  engine caps as first content); demote the raw-nonce encrypt seams in core to
+  `package`; core KATs unchanged and byte-exact. `PayloadEncryptor` stays public
+  until Stage B so a sanctioned encrypt path always exists. Breaking, changeset
+  per move.
+- **Stage B — engine core.** `SEALConfiguration` + profile tuple validation,
+  writer/reader (write & read paths, snapshot lifecycle, budgets, freeze/resume),
+  RO structural write-once; delete `PayloadEncryptor` (absorbed by the writer).
+  End-to-end tests: E-vector payloads round-tripped through the engine; profile
+  validation matrix; finality-rule negatives.
+- **Stage C — RW rewrite + named instantiations.** `resumeWriting`/`rewrite` with
+  internal unmasking (pin against E.16.1 rewrite vector); `SEALScheme` from the
+  vendored §4.12 table.
+- **Stage D — conveniences (optional).** Linear-layout `SEALContainer`; hedged
+  nonces (Appendix D); AsyncSequence streaming if a consumer needs it.
+
+## 5. Prerequisite and open spec checks
+
+**Vendor the HTML snapshot first** (the existing `SOURCE.md` TODO). Two live-URL
+reads of §4.10.2/§4.12 disagreed in detail (does RO admit the MMH snapshot, or must
+it omit the authenticator? are the named instantiations enumerated, and under which
+names?). The profile table and §4.12 tuples must be transcribed into `NOTES.md` from
+a pinned snapshot before Stage B, same discipline as the existing KDF transcription.
+
+Also confirm: Appendix D hedged-nonce normativity (MUST/SHOULD/MAY) — determines
+whether stage-D hedging is optional; and whether §4.9.1.2's finality rule applies
+when `snap_id = none` (affects the no-snapshot reader).
