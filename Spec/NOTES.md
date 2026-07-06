@@ -161,11 +161,18 @@ All keys derive from `CEK` (ikm) with `payload_info` as the KDF `info` list. The
 epoch_length(u8), salt(32)]`.
 
 ```
-commitment  = KDF(protocol_id, "commit",      [CEK], payload_info, commit_len)  ; default Nh, min 16
+commitment  = KDF(protocol_id, "commit",      [CEK], [...payload_info, G], commit_len)  ; default Nh, min 16
 payload_key = KDF(protocol_id, "payload_key", [CEK], payload_info, Nk)
 snap_key    = KDF(protocol_id, "acc_key",     [CEK], payload_info, Nh)
 nonce_base  = KDF(protocol_id, "nonce_base",  [CEK], payload_info, Nn)           ; derived mode only
 ```
+
+**Global associated data `G` (§4.6, verified vs E.2):** the commitment — and only the
+commitment — binds `G` as one framed element appended after `payload_info`. `G`
+defaults to the empty octet string, which is still committed (an empty final frame,
+`0x0000`). It is never stored; the decryptor supplies it from application context, and
+a wrong `G` fails the commitment check like a wrong CEK. This element was added to the
+draft after the vectors were first extracted — see `SOURCE.md` on the intra-day drift.
 
 The draft prints a full KDF trace for the commitment; our Stage-1 KDF reproduces
 `prk` and `commitment` exactly, confirming framing + Extract/Expand are correct.

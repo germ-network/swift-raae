@@ -127,19 +127,17 @@ struct WriteOnceProfileTests {
 	}
 
 	/// KAT pinning the SEAL-RO-v1 schedule bytes (CEK 32×0xAA, salt 32×0x04,
-	/// AES-256-GCM, HKDF-SHA-256, derived mode, snap_id 0x0000, epoch_length 0),
-	/// guarding the profile-string and snap_id plumbing: these derivations differ
-	/// from the vendored RW vectors only through `protocol_id` and the Table-13
-	/// tuple. Provenance: the pre-Table-13 values (snap_id 0x0001) were generated
-	/// with an independent implementation; after pinning RO to snap_id 0x0000 the
-	/// values were regenerated with this implementation, so this is a regression
-	/// pin — the KDF construction itself stays independently verified via the
-	/// Appendix E vectors.
+	/// AES-256-GCM, HKDF-SHA-256, derived mode, snap_id 0x0000, epoch_length 0,
+	/// G empty), guarding the profile-string, snap_id, and G plumbing: these
+	/// derivations differ from the vendored RW vectors only through `protocol_id`
+	/// and the Table-13 tuple. Provenance: every value below was verified against
+	/// an independent from-scratch implementation of the labeled KDF (§4.3/§4.5,
+	/// HMAC-SHA-256 Extract/Expand + lp16 framing, Python hmac/hashlib), byte-exact.
 	@Test func writeOnceScheduleKAT() throws {
 		let schedule = try makeSchedule(protocolID: ProtocolID.immutable, aeadID: 0x0002)
 		#expect(
 			Hex.encode(schedule.commitment)
-				== "962d10b4c382d1ec2e12946b4b58f5f5e0acb33751a3efd09bb8a937dec0d8f8"
+				== "0436f553c7263df555678aa4b69e62744cfb83b8766c61547e7056f5ada0ebd1"
 		)
 		#expect(
 			keyHex(schedule.payloadKey)

@@ -56,7 +56,7 @@ the host storing the object:
   become mutually substitutable, with valid commitments and snapshots. Generate a
   fresh random 32-octet salt (or a fresh CEK) for every object.
 - **Verify before decrypting.** Obtain decrypt-side schedules via
-  ``PayloadSchedule/startDecrypt(protocolID:cek:payloadInfo:publishedCommitment:expectedCommitmentLength:)``
+  ``PayloadSchedule/startDecrypt(protocolID:cek:payloadInfo:publishedCommitment:expectedCommitmentLength:globalAssociatedData:)``
   (§4.6) and verify the snapshot before trusting the segment set (§4.9.1.2).
 - **Snapshot freshness.** A complete old `(segments, snapshot)` pair verifies — the
   snapshot proves set integrity, not recency. Rollback protection requires the host
@@ -84,7 +84,7 @@ the host storing the object:
 
 ### Safe decryption
 
-- ``PayloadSchedule/startDecrypt(protocolID:cek:payloadInfo:publishedCommitment:expectedCommitmentLength:)``
+- ``PayloadSchedule/startDecrypt(protocolID:cek:payloadInfo:publishedCommitment:expectedCommitmentLength:globalAssociatedData:)``
 - ``PayloadSchedule/verifyCommitment(_:)``
 
 ### Usage limits
