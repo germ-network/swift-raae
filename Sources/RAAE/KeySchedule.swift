@@ -26,6 +26,13 @@ public struct PayloadSchedule {
 	/// Base nonce for derived mode; `nil` in random mode. Internal (§5.8).
 	let nonceBase: SymmetricKey?
 
+	/// Whether this schedule's protocol ID selects the write-once profile
+	/// (`SEAL-RO-v1`, §4.10.2): every segment is encrypted exactly once and never
+	/// rewritten. This is what licenses derived nonce mode with a non-MRAE AEAD
+	/// (§4.5.3.2) — the discipline itself is the caller's obligation (and is metered
+	/// by `PayloadEncryptor` for a single live writer).
+	public var isWriteOnceProfile: Bool { protocolID == ProtocolID.immutable }
+
 	/// Minimum commitment length (§4.6).
 	public static let minCommitmentLength = 16
 
@@ -51,8 +58,12 @@ public struct PayloadSchedule {
 		case commitmentTooLong(Int)
 		/// CEK was not exactly `cekLength` (32) octets.
 		case invalidCEKLength(Int)
-		/// Derived nonce mode was selected with a non-MRAE AEAD. A rewrite would reuse
-		/// the segment's fixed nonce; only an MRAE AEAD (AES-256-GCM-SIV) is safe here.
+		/// Derived nonce mode was selected with a non-MRAE AEAD under a rewritable
+		/// profile. A rewrite would reuse the segment's fixed nonce; only an MRAE AEAD
+		/// (AES-256-GCM-SIV) is safe there (§4.5.3.2). The pairing is permitted under
+		/// the write-once `SEAL-RO-v1` profile (``ProtocolID/immutable``), where each
+		/// derived nonce is used exactly once; unknown protocol IDs are treated as
+		/// rewritable (strict).
 		case derivedModeRequiresMRAE(UInt16)
 	}
 
@@ -93,9 +104,12 @@ public struct PayloadSchedule {
 		guard let kdf = SuiteRegistry.kdf(id: payloadInfo.kdfID) else {
 			throw ScheduleError.unsupportedKDF(payloadInfo.kdfID)
 		}
-		// Derived nonce mode reuses a segment's fixed nonce on rewrite, so it is only
-		// safe with an MRAE AEAD (draft Table 4). Reject the unsafe pairing up front.
-		guard !(payloadInfo.nonceMode == .derived && !aead.isMRAE) else {
+		// Derived nonce mode fixes each segment's nonce, so a rewrite would reuse it.
+		// §4.5.3.2: with a non-MRAE AEAD the mode MUST be confined to a write-once
+		// profile. Permit the pairing only under SEAL-RO-v1 (each segment encrypted
+		// exactly once); any other protocol ID — including unknown ones — stays strict.
+		let isWriteOnce = protocolID == ProtocolID.immutable
+		guard !(payloadInfo.nonceMode == .derived && !aead.isMRAE && !isWriteOnce) else {
 			throw ScheduleError.derivedModeRequiresMRAE(payloadInfo.aeadID)
 		}
 		let commitLen = commitmentLength ?? kdf.outputSize

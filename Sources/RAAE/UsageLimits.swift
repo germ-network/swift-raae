@@ -8,11 +8,14 @@ import Foundation
 /// be rotated in place, so continued writing needs a new object under a fresh CEK.
 public struct UsageBudget: Equatable, Sendable {
 	/// `log2` of allowed segment encryptions per **epoch key** — the random-nonce
-	/// collision pool (§5.9.7.1) in random mode, or the MRAE distinct-derived-nonce pool
-	/// (§5.9.7.4) in derived mode.
+	/// collision pool (§5.9.7.1) in random mode, the MRAE distinct-derived-nonce pool
+	/// (§5.9.7.4) in derived mode, or the structural cap `r` (2^r segment indices per
+	/// epoch key) in write-once derived mode with a non-MRAE AEAD (§4.5.3.2).
 	public let perEpochKeyLog2: Int
 	/// `log2` of allowed encryptions of one **segment** at its fixed derived nonce (the
-	/// MRAE hot-rewrite cap, §5.9.7.4); `nil` in random mode (no separate per-segment cap).
+	/// MRAE hot-rewrite cap, §5.9.7.4); `0` in write-once derived mode with a non-MRAE
+	/// AEAD (exactly one encryption per segment — rewriting is what the write-once
+	/// profile forbids); `nil` in random mode (no separate per-segment cap).
 	public let perSegmentLog2: Int?
 	/// Distinct epoch keys per `payload_key` should stay below `2^this` (128-bit-key
 	/// epoch-key-collision floor, §5.9.6); `nil` for ≥ 256-bit keys. Advisory ceiling on
@@ -36,6 +39,17 @@ extension PayloadSchedule {
 				perEpochKeyLog2: perEpoch, perSegmentLog2: nil,
 				maxEpochKeysLog2: maxEpochKeys)
 		case .derived:
+			guard aead.isMRAE else {
+				// §4.5.3.2: a non-MRAE AEAD in derived mode is only constructible under
+				// the write-once profile, so the budget *is* the discipline: exactly one
+				// encryption per segment (`perSegmentLog2 = 0`), and at most the 2^r
+				// segment indices an epoch key covers (`perEpochKeyLog2 = r`). Nonces
+				// are distinct by construction, so no birthday term applies.
+				return UsageBudget(
+					perEpochKeyLog2: Int(payloadInfo.epochLength),
+					perSegmentLog2: 0,
+					maxEpochKeysLog2: maxEpochKeys)
+			}
 			// §5.9.7.4: 128-bit synthetic-IV birthday over distinct nonces per epoch key,
 			// and a hot-segment data-volume cap reduced by the per-segment block count L.
 			let birthdayLog2 = max(0, (128 - advantageLog2) / 2)

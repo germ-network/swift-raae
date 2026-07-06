@@ -49,7 +49,10 @@ struct SecurityHardeningTests {
 		#expect(pt == [1, 2, 3])
 	}
 
-	// MARK: H2 — derived nonce mode requires an MRAE AEAD.
+	// MARK: H2 — derived nonce mode requires an MRAE AEAD under a rewritable profile.
+	// (§4.5.3.2 confines the non-MRAE pairing to write-once profiles; the SEAL-RO-v1
+	// relaxation is covered by WriteOnceProfileTests. `makeSchedule` uses the mutable
+	// profile, so the strict gate applies here.)
 
 	@Test func derivedModeWithNonMRAEIsRejected() {
 		// AES-256-GCM (0x0002) is not MRAE ⇒ derived mode + rewrite would reuse a nonce.

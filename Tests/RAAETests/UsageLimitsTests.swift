@@ -49,6 +49,48 @@ struct UsageLimitsTests {
 		#expect(b16k.perSegmentLog2 == 38)  // L = 1024 ⇒ 48 - 10
 	}
 
+	@Test func writeOnceDerivedBudgets() throws {
+		// Non-MRAE derived is only constructible under SEAL-RO-v1 (§4.5.3.2); the
+		// budget is the write-once discipline itself: one encryption per segment,
+		// and the 2^r segment indices an epoch key covers.
+		let info = PayloadInfo(
+			aeadID: 0x0002, segmentMax: 16384, kdfID: 0x0001, snapID: 0x0001,
+			nonceMode: .derived, epochLength: 3,
+			salt: [UInt8](repeating: 0x04, count: 32))
+		let sched = try PayloadSchedule(
+			protocolID: ProtocolID.immutable, cek: [UInt8](repeating: 0xAA, count: 32),
+			payloadInfo: info)
+		let b = sched.usageBudget()
+		#expect(b.perEpochKeyLog2 == 3)
+		#expect(b.perSegmentLog2 == 0)
+		#expect(b.maxEpochKeysLog2 == nil)
+	}
+
+	@Test func writeOnceEncryptorRejectsRewrite() throws {
+		let info = PayloadInfo(
+			aeadID: 0x0002, segmentMax: 16384, kdfID: 0x0001, snapID: 0x0001,
+			nonceMode: .derived, epochLength: 1,
+			salt: [UInt8](repeating: 0x04, count: 32))
+		let sched = try PayloadSchedule(
+			protocolID: ProtocolID.immutable, cek: [UInt8](repeating: 0xAA, count: 32),
+			payloadInfo: info)
+		let enc = PayloadEncryptor(schedule: sched, policy: .enforce)
+		let pos = SegmentPosition(index: 0, isFinal: false)
+		_ = try enc.encryptDerived(position: pos, associatedData: [], plaintext: [1])
+		// A second encryption of the same index is a rewrite: nonce reuse under GCM.
+		// The per-segment budget of 2^0 = 1 makes the encryptor the write-once meter.
+		#expect(
+			throws: BudgetError.segmentRewriteBudgetExceeded(
+				index: 0, count: 2, limitLog2: 0)
+		) {
+			_ = try enc.encryptDerived(position: pos, associatedData: [], plaintext: [1])
+		}
+		// A first write of a different index in the same epoch is still permitted
+		// (epochLength 1 ⇒ 2 first-writes per epoch key).
+		_ = try enc.encryptDerived(
+			position: .init(index: 1, isFinal: false), associatedData: [], plaintext: [1])
+	}
+
 	// MARK: enforcement (use a high advantage target to shrink the budget for testing)
 
 	@Test func enforceThrowsAtEpochBoundary() throws {

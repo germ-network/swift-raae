@@ -180,10 +180,14 @@ vector's fixed nonce to pin the ciphertext in both directions.
 - **Segment AAD framing uses the real `LH`.** `Segment.aad*Mode` takes the message KDF so
   over-large `A_i` (> 65534 octets) frames to `0xFFFF || LH(A_i)`, not a stub — otherwise
   distinct large associated-data values would collide.
-- **Derived nonce mode requires an MRAE AEAD.** `PayloadSchedule.init` rejects
-  `nonce_mode = derived` unless the AEAD is MRAE (`AEAD.isMRAE`; today only
-  AES-256-GCM-SIV). A rewrite reuses a segment's fixed nonce, so non-MRAE there is unsafe.
-  (Write-once profiles could relax this later behind an explicit opt-in.)
+- **Derived nonce mode requires an MRAE AEAD under rewritable profiles.** A rewrite
+  reuses a segment's fixed nonce, so `PayloadSchedule.init` rejects
+  `nonce_mode = derived` with a non-MRAE AEAD — except under `SEAL-RO-v1`
+  (`ProtocolID.immutable`), the write-once profile, where §4.5.3.2 permits the pairing
+  because each segment is encrypted exactly once. Unknown protocol IDs are treated as
+  rewritable (strict). The write-once discipline itself is the caller's obligation;
+  `PayloadEncryptor` meters it for a single live writer (per-segment budget = one
+  encryption, per-epoch-key budget = the epoch's `2^r` indices).
 - **CEK length is fixed at 32 octets** and validated in `PayloadSchedule.init`.
 - **Verify-before-decrypt is the recommended/safe path** (§4.6, §4.9.1.2), enforced by
   convention (a documented MUST), not by the type system — the public `init` can still
