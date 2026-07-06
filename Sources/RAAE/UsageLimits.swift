@@ -141,9 +141,9 @@ public final class PayloadEncryptor {
 	/// The nonce is generated internally (``Segment/freshNonce(for:)``): the §5.9.7.1
 	/// budget this encryptor meters assumes every encryption uses a fresh uniformly
 	/// random nonce, which a caller-supplied nonce could silently violate without the
-	/// meter noticing. Callers that must pin a nonce (test vectors, interop
-	/// reproduction) use the unmetered
-	/// ``Segment/encryptRandom(schedule:position:associatedData:plaintext:nonce:)``.
+	/// meter noticing. The pinned-nonce seam (`Segment.encryptRandom(... nonce:)`) is
+	/// `package`-scoped for the byte-exact KATs and the SEAL engine; it is not on the
+	/// public surface.
 	public func encryptRandom(
 		position: SegmentPosition, associatedData: [UInt8], plaintext: [UInt8]
 	) throws -> (nonce: [UInt8], ciphertext: [UInt8]) {

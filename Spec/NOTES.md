@@ -231,7 +231,9 @@ vector's fixed nonce to pin the ciphertext in both directions.
   per-epoch-key (and, derived, per-segment) encryptions and delegates to the byte-exact
   `Segment` statics. The metered random-mode path generates its own nonce and returns
   it — the §5.9.7.1 budget assumes uniformly random nonces, so the meter must own
-  generation; pinned nonces (vectors) go through the unmetered `Segment` static. The `maxEpochKeysLog2` ceiling (§5.9.6) is advisory and not metered.
+  generation. The pinned-nonce seam (`Segment.encryptRandom(... nonce:)`, and the
+  unmetered derived core) is `package`-scoped: reachable by the byte-exact KATs and
+  the SEAL engine target, never by consumers (see `Spec/SEAL-ENGINE-PLAN.md`). The `maxEpochKeysLog2` ceiling (§5.9.6) is advisory and not metered.
   Cross-process accounting (snapshot via `persistableState`, restore via `seed`) and the
   decrypt-side forgery bound are the host's responsibility.
 - **Host obligations are documented on the DocC landing page** (and on the relevant

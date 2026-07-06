@@ -121,9 +121,11 @@ public enum Segment {
 
 	/// Encrypt one segment in random nonce mode, returning `(nonce, ciphertext = ct||tag)`.
 	///
-	/// The nonce is caller-supplied so tests can pin a vector's fixed nonce; production
-	/// random-mode callers pass a freshly generated `Nn`-octet nonce.
-	public static func encryptRandom(
+	/// The nonce is caller-supplied — the pinned-nonce seam the byte-exact KATs and the
+	/// SEAL engine build on. `package`-scoped: outside this package, random-mode
+	/// encryption goes through a nonce-generating wrapper (`PayloadEncryptor` today,
+	/// the SEAL writer once it lands), so a consumer can never reuse a nonce here.
+	package static func encryptRandom(
 		schedule: PayloadSchedule,
 		position: SegmentPosition,
 		associatedData: [UInt8],
@@ -182,11 +184,12 @@ public enum Segment {
 			plaintext: plaintext)
 	}
 
-	/// The unmetered derived-mode encryption core. Internal: ``PayloadEncryptor`` calls
-	/// this after charging the §5.9 budget — the metering is what licenses the
-	/// write-once non-MRAE pairing; every external caller goes through
-	/// ``encryptDerived(schedule:position:associatedData:plaintext:)``, which gates it.
-	static func encryptDerivedUnmetered(
+	/// The unmetered derived-mode encryption core. `package`-scoped: ``PayloadEncryptor``
+	/// (and the SEAL writer once it lands) calls this after charging the §5.9 budget —
+	/// the metering is what licenses the write-once non-MRAE pairing; every external
+	/// caller goes through ``encryptDerived(schedule:position:associatedData:plaintext:)``,
+	/// which gates it.
+	package static func encryptDerivedUnmetered(
 		schedule: PayloadSchedule,
 		position: SegmentPosition,
 		associatedData: [UInt8],
