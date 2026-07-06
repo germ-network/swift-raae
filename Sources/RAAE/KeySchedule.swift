@@ -33,7 +33,11 @@ public struct PayloadSchedule {
 	/// by `PayloadEncryptor` for a single live writer).
 	public var isWriteOnceProfile: Bool { protocolID == ProtocolID.immutable }
 
-	/// Minimum commitment length (§4.6).
+	/// Minimum commitment length (§4.6). At this 16-octet draft floor the
+	/// key-committing property has only ~2^64 collision resistance — a multi-key
+	/// adversary searching for two CEKs sharing one commitment works at the birthday
+	/// bound of the truncated output. Keep the default full-`Nh` commitment unless an
+	/// interop profile demands the floor.
 	public static let minCommitmentLength = 16
 
 	/// Largest commitment length a given KDF can safely produce: bounded by HKDF's `255·Nh`
@@ -92,6 +96,9 @@ public struct PayloadSchedule {
 	/// - Parameter commitmentLength: defaults to the KDF's `Nh`; must be in
 	///   `[16, min(255·Nh, 0xFFFE)]`. Out-of-range values throw
 	///   ``ScheduleError/commitmentTooShort(_:)`` / ``ScheduleError/commitmentTooLong(_:)``.
+	///   Keep the default: truncation halves the committing property's bits (the
+	///   16-octet floor leaves ~2^64 collision resistance against multi-key
+	///   adversaries; see ``minCommitmentLength``).
 	public init(
 		protocolID: [UInt8],
 		cek: [UInt8],

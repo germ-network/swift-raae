@@ -215,6 +215,10 @@ vector's fixed nonce to pin the ciphertext in both directions.
   `verifyCommitment(_:)` is the standalone check. A mismatch throws
   `CommitmentError.commitmentMismatch` and the caller MUST abandon decryption (dropping the
   rejected schedule scrubs its zeroizing keys, meeting the §4.6 SHOULD).
+- **Commitment length: keep the default `Nh`.** The §4.6 floor of 16 octets bounds
+  the key-committing property at ~2^64 (birthday on the truncated output) against
+  multi-key / invisible-salamander-style adversaries. The default full-`Nh`
+  commitment is the recommendation; the floor exists for interop, not as a target.
 - **Derived keys are not on the public API** (§5.8): `payloadKey`/`snapKey`/`nonceBase`
   and per-segment keys are internal and held as zeroizing `SymmetricKey` (scrubbed when
   the last reference is released). `AEAD.seal/open` take `SymmetricKey`. Honest limit: each
