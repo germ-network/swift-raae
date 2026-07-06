@@ -100,6 +100,9 @@ other field (no separate extra prefix).
 
 `nonce(i) = nonce_base XOR ((i<<1)|is_final)`, where the value is encoded big-endian and
 XORed into the **low 8 octets** of the `Nn`-octet `nonce_base` (requires `Nn ≥ 8`).
+`(i<<1)|is_final` must fit 64 bits, so derived mode rejects `i ≥ 2^63` (a larger index
+would silently drop its top bit and alias the nonce of `i − 2^63` — never under the same
+epoch key for `r ≤ 63`, but the injectivity assumption should not rest on that).
 
 ## payload_info wire layout (§4 / Table refs)
 

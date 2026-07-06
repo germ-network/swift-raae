@@ -21,6 +21,10 @@ public enum Segment {
 		case nonceTooShortForDerivedMode(Int)
 		/// Derived-mode operation attempted without a `nonce_base` in the schedule.
 		case missingNonceBase
+		/// Derived nonce mode needs `index < 2^63` so `(i<<1)|is_final` fits the
+		/// 64-bit value XORed into the nonce (§4.5.3); a larger index would silently
+		/// drop its top bit and collide with `index − 2^63`.
+		case indexTooLargeForDerivedMode(UInt64)
 		/// The segment plaintext (on decrypt: the plaintext length implied by
 		/// `len(ct||tag) − Nt`) exceeded the schedule's `segment_max` (§4.4). Enforced on
 		/// both paths: the §5.9.7.4 per-segment budget assumes at most `segment_max`
@@ -66,9 +70,18 @@ public enum Segment {
 
 	/// `nonce(i) = nonce_base XOR ((i<<1)|is_final)` (§4.5.3): the value is encoded as a
 	/// big-endian integer right-aligned to (and XORed into) the low octets of `nonce_base`.
+	///
+	/// `index` must be below `2^63` so `(i<<1)|is_final` fits the 64-bit XOR block —
+	/// Swift's `<<` silently discards the shifted-out top bit, so a larger index would
+	/// alias the nonce of `index − 2^63`. (Not exploitable today — indices `2^63` apart
+	/// always fall in different epochs for `r ≤ 63`, hence different segment keys — but
+	/// the draft's nonce-injectivity assumption should not rest on that.)
 	public static func derivedNonce(nonceBase: [UInt8], position: SegmentPosition) throws
 		-> [UInt8]
 	{
+		guard position.index < (UInt64(1) << 63) else {
+			throw SegmentError.indexTooLargeForDerivedMode(position.index)
+		}
 		guard nonceBase.count >= 8 else {
 			throw SegmentError.nonceTooShortForDerivedMode(nonceBase.count)
 		}
