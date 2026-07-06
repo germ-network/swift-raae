@@ -68,6 +68,11 @@ extension PayloadSchedule {
 /// How a `PayloadEncryptor` reacts when a budget is reached (§5.9.5).
 public enum BudgetPolicy: Sendable {
 	/// Invoke `onBudgetEvent` but still perform the encryption.
+	///
+	/// Exception: on a write-once (`SEAL-RO-v1`) schedule with a non-MRAE AEAD in
+	/// derived mode, the per-segment cap hard-stops under both policies — exceeding it
+	/// is fixed-nonce reuse under AES-GCM / ChaCha20-Poly1305 (§4.5.3.2), not a
+	/// statistical budget to warn past.
 	case warn
 	/// Invoke `onBudgetEvent` and throw, refusing the encryption.
 	case enforce
@@ -114,6 +119,10 @@ public final class PayloadEncryptor {
 
 	private var epochCounts: [UInt64: UInt64] = [:]
 	private var segmentRewrites: [UInt64: UInt64] = [:]
+	/// §4.5.3.2: on a write-once schedule with a non-MRAE AEAD in derived mode the
+	/// per-segment cap is not a soft budget — exceeding it reuses the segment's fixed
+	/// nonce — so it throws under both policies (see ``BudgetPolicy/warn``).
+	private let hardPerSegmentCap: Bool
 
 	public init(
 		schedule: PayloadSchedule, policy: BudgetPolicy = .enforce, advantageLog2: Int = 32
@@ -121,26 +130,39 @@ public final class PayloadEncryptor {
 		self.schedule = schedule
 		self.budget = schedule.usageBudget(advantageLog2: advantageLog2)
 		self.policy = policy
+		self.hardPerSegmentCap =
+			schedule.isWriteOnceProfile && !schedule.aead.isMRAE
+			&& schedule.payloadInfo.nonceMode == .derived
 	}
 
-	/// Random-mode segment encryption with accounting. Pass a fresh nonce
-	/// (``Segment/freshNonce(for:)``).
+	/// Random-mode segment encryption with accounting, returning the freshly generated
+	/// nonce alongside `ct || tag`.
+	///
+	/// The nonce is generated internally (``Segment/freshNonce(for:)``): the §5.9.7.1
+	/// budget this encryptor meters assumes every encryption uses a fresh uniformly
+	/// random nonce, which a caller-supplied nonce could silently violate without the
+	/// meter noticing. Callers that must pin a nonce (test vectors, interop
+	/// reproduction) use the unmetered
+	/// ``Segment/encryptRandom(schedule:position:associatedData:plaintext:nonce:)``.
 	public func encryptRandom(
-		position: SegmentPosition, associatedData: [UInt8], plaintext: [UInt8],
-		nonce: [UInt8]
+		position: SegmentPosition, associatedData: [UInt8], plaintext: [UInt8]
 	) throws -> (nonce: [UInt8], ciphertext: [UInt8]) {
 		try charge(position: position)
 		return try Segment.encryptRandom(
 			schedule: schedule, position: position, associatedData: associatedData,
-			plaintext: plaintext, nonce: nonce)
+			plaintext: plaintext, nonce: Segment.freshNonce(for: schedule.aead))
 	}
 
-	/// Derived-mode segment encryption with accounting.
+	/// Derived-mode segment encryption with accounting. This is the only sanctioned
+	/// encrypt path for the write-once non-MRAE pairing (§4.5.3.2), whose per-segment
+	/// cap hard-stops under both policies; the unmetered
+	/// ``Segment/encryptDerived(schedule:position:associatedData:plaintext:)`` refuses
+	/// that configuration.
 	public func encryptDerived(
 		position: SegmentPosition, associatedData: [UInt8], plaintext: [UInt8]
 	) throws -> [UInt8] {
 		try charge(position: position)
-		return try Segment.encryptDerived(
+		return try Segment.encryptDerivedUnmetered(
 			schedule: schedule, position: position, associatedData: associatedData,
 			plaintext: plaintext)
 	}
@@ -192,7 +214,7 @@ public final class PayloadEncryptor {
 					BudgetEvent(
 						kind: .segment, index: position.index, count: count,
 						limitLog2: perSegment))
-				if policy == .enforce {
+				if policy == .enforce || hardPerSegmentCap {
 					throw BudgetError.segmentRewriteBudgetExceeded(
 						index: position.index, count: count,
 						limitLog2: perSegment)

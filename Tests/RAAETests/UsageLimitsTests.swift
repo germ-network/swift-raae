@@ -83,12 +83,14 @@ struct UsageLimitsTests {
 			throws: BudgetError.segmentRewriteBudgetExceeded(
 				index: 0, count: 2, limitLog2: 0)
 		) {
-			_ = try enc.encryptDerived(position: pos, associatedData: [], plaintext: [1])
+			_ = try enc.encryptDerived(
+				position: pos, associatedData: [], plaintext: [1])
 		}
 		// A first write of a different index in the same epoch is still permitted
 		// (epochLength 1 ⇒ 2 first-writes per epoch key).
 		_ = try enc.encryptDerived(
-			position: .init(index: 1, isFinal: false), associatedData: [], plaintext: [1])
+			position: .init(index: 1, isFinal: false), associatedData: [],
+			plaintext: [1])
 	}
 
 	// MARK: enforcement (use a high advantage target to shrink the budget for testing)
@@ -98,21 +100,19 @@ struct UsageLimitsTests {
 		// advantageLog2 = 91 ⇒ perEpochKeyLog2 = (97 - 91)/2 = 3 ⇒ limit 2^3 = 8.
 		let enc = PayloadEncryptor(schedule: sched, policy: .enforce, advantageLog2: 91)
 		#expect(enc.budget.perEpochKeyLog2 == 3)
-		let nonce = Segment.freshNonce(for: sched.aead)
 		// 8 encryptions under epoch 0 (indices 0,1 share epoch with epochLength=1) succeed.
 		for i in 0..<8 {
 			_ = try enc.encryptRandom(
 				position: .init(index: UInt64(i % 2), isFinal: false),
 				associatedData: [],
-				plaintext: [1], nonce: nonce)
+				plaintext: [1])
 		}
 		#expect(enc.count(epochIndex: 0) == 8)
 		// The 9th throws and does NOT advance the counter past the limit.
 		#expect(throws: BudgetError.self) {
 			_ = try enc.encryptRandom(
 				position: .init(index: 0, isFinal: false), associatedData: [],
-				plaintext: [1],
-				nonce: nonce)
+				plaintext: [1])
 		}
 		#expect(enc.count(epochIndex: 0) == 8)
 	}
@@ -123,12 +123,10 @@ struct UsageLimitsTests {
 		// perEpochKeyLog2 = (97-95)/2 = 1 ⇒ limit 2 ⇒ the 3rd encryption trips warn.
 		var events: [BudgetEvent] = []
 		enc.onBudgetEvent = { events.append($0) }
-		let nonce = Segment.freshNonce(for: sched.aead)
 		for _ in 0..<3 {
 			_ = try enc.encryptRandom(
 				position: .init(index: 0, isFinal: false), associatedData: [],
-				plaintext: [1],
-				nonce: nonce)
+				plaintext: [1])
 		}
 		#expect(enc.count(epochIndex: 0) == 3)  // proceeded past the budget
 		#expect(events.count == 1 && events.first?.kind == .epochKey)
@@ -137,18 +135,34 @@ struct UsageLimitsTests {
 	@Test func epochsAreCountedSeparately() throws {
 		let sched = try schedule(aeadID: 0x0002, nonceMode: .random)  // epochLength = 1
 		let enc = PayloadEncryptor(schedule: sched)
-		let nonce = Segment.freshNonce(for: sched.aead)
 		_ = try enc.encryptRandom(
 			position: .init(index: 0, isFinal: false), associatedData: [],
-			plaintext: [1], nonce: nonce)
+			plaintext: [1])
 		_ = try enc.encryptRandom(
 			position: .init(index: 1, isFinal: false), associatedData: [],
-			plaintext: [1], nonce: nonce)
+			plaintext: [1])
 		_ = try enc.encryptRandom(
 			position: .init(index: 2, isFinal: false), associatedData: [],
-			plaintext: [1], nonce: nonce)
+			plaintext: [1])
 		#expect(enc.count(epochIndex: 0) == 2)  // indices 0,1 (>>1 == 0)
 		#expect(enc.count(epochIndex: 1) == 1)  // index 2 (>>1 == 1)
+	}
+
+	@Test func meteredRandomModeGeneratesFreshNonces() throws {
+		// The metered wrapper owns nonce generation — the §5.9.7.1 budget assumes
+		// uniformly random nonces — and returns the nonce it used.
+		let sched = try schedule(aeadID: 0x0002, nonceMode: .random)
+		let enc = PayloadEncryptor(schedule: sched)
+		let pos = SegmentPosition(index: 0, isFinal: false)
+		let a = try enc.encryptRandom(position: pos, associatedData: [], plaintext: [1])
+		let b = try enc.encryptRandom(position: pos, associatedData: [], plaintext: [1])
+		#expect(a.nonce.count == sched.aead.nonceLength)
+		#expect(a.nonce != b.nonce)  // 2^-96 false-failure probability
+		// The returned nonce is the one the ciphertext authenticates under.
+		let back = try Segment.decryptRandom(
+			schedule: sched, position: pos, associatedData: [], nonce: a.nonce,
+			ciphertext: a.ciphertext)
+		#expect(back == [1])
 	}
 
 	@Test func meteredOutputIsByteIdenticalToStatic() throws {
@@ -170,10 +184,9 @@ struct UsageLimitsTests {
 		let sched = try schedule(aeadID: 0x0002, nonceMode: .random)
 		let enc = PayloadEncryptor(schedule: sched)
 		enc.seed(epochCounts: [0: 100])
-		let nonce = Segment.freshNonce(for: sched.aead)
 		_ = try enc.encryptRandom(
 			position: .init(index: 0, isFinal: false), associatedData: [],
-			plaintext: [1], nonce: nonce)
+			plaintext: [1])
 		#expect(enc.count(epochIndex: 0) == 101)
 	}
 

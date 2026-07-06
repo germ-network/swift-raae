@@ -20,7 +20,51 @@ public enum Segment {
 		/// Derived nonce mode needs `Nn >= 8` to hold `(i<<1)|is_final`.
 		case nonceTooShortForDerivedMode(Int)
 		/// Derived-mode operation attempted without a `nonce_base` in the schedule.
+		/// Defensive: unreachable through the public API now that every path checks
+		/// ``nonceModeMismatch(scheduleMode:)`` first (`nonce_base` exists iff the
+		/// schedule's mode is derived).
 		case missingNonceBase
+		/// The operation's nonce mode does not match the schedule's committed
+		/// `nonce_mode` (§4.4) — e.g. a random-mode encrypt on a derived-mode schedule.
+		/// Segments must be produced and consumed in the committed mode; mixing modes
+		/// under one schedule would emit objects that contradict their `payload_info`.
+		case nonceModeMismatch(scheduleMode: PayloadInfo.NonceMode)
+		/// Derived nonce mode needs `index < 2^63` so `(i<<1)|is_final` fits the
+		/// 64-bit value XORed into the nonce (§4.5.3); a larger index would silently
+		/// drop its top bit and collide with `index − 2^63`.
+		case indexTooLargeForDerivedMode(UInt64)
+		/// Derived-mode encryption on a write-once (`SEAL-RO-v1`) schedule with a
+		/// non-MRAE AEAD must go through ``PayloadEncryptor``: the §4.5.3.2 discipline
+		/// is one encryption per segment, and an unmetered second encryption at the
+		/// same position would reuse the segment's fixed nonce — catastrophic for
+		/// AES-GCM / ChaCha20-Poly1305 (keystream reuse and forgeability).
+		case writeOnceRequiresMeteredEncryptor
+		/// The segment plaintext (on decrypt: the plaintext length implied by
+		/// `len(ct||tag) − Nt`) exceeded the schedule's `segment_max` (§4.4). Enforced on
+		/// both paths: the §5.9.7.4 per-segment budget assumes at most `segment_max`
+		/// octets per segment, so an oversized segment would silently weaken the metered
+		/// data-volume bound.
+		case exceedsSegmentMax(length: Int, segmentMax: UInt32)
+	}
+
+	/// Reject an operation whose nonce mode differs from the schedule's committed
+	/// `nonce_mode` (§4.4).
+	private static func checkNonceMode(
+		_ expected: PayloadInfo.NonceMode, schedule: PayloadSchedule
+	) throws {
+		guard schedule.payloadInfo.nonceMode == expected else {
+			throw SegmentError.nonceModeMismatch(
+				scheduleMode: schedule.payloadInfo.nonceMode)
+		}
+	}
+
+	/// Reject a segment longer than the schedule's `segment_max` (§4.4). `length` is the
+	/// plaintext length (on decrypt, implied by the ciphertext length minus `Nt`).
+	private static func checkSegmentMax(length: Int, schedule: PayloadSchedule) throws {
+		guard length <= schedule.payloadInfo.segmentMax else {
+			throw SegmentError.exceedsSegmentMax(
+				length: length, segmentMax: schedule.payloadInfo.segmentMax)
+		}
 	}
 
 	/// `segment_aad(i, is_final, A_i)` for the random nonce mode (§4.4.2, Table 2).
@@ -51,9 +95,18 @@ public enum Segment {
 
 	/// `nonce(i) = nonce_base XOR ((i<<1)|is_final)` (§4.5.3): the value is encoded as a
 	/// big-endian integer right-aligned to (and XORed into) the low octets of `nonce_base`.
+	///
+	/// `index` must be below `2^63` so `(i<<1)|is_final` fits the 64-bit XOR block —
+	/// Swift's `<<` silently discards the shifted-out top bit, so a larger index would
+	/// alias the nonce of `index − 2^63`. (Not exploitable today — indices `2^63` apart
+	/// always fall in different epochs for `r ≤ 63`, hence different segment keys — but
+	/// the draft's nonce-injectivity assumption should not rest on that.)
 	public static func derivedNonce(nonceBase: [UInt8], position: SegmentPosition) throws
 		-> [UInt8]
 	{
+		guard position.index < (UInt64(1) << 63) else {
+			throw SegmentError.indexTooLargeForDerivedMode(position.index)
+		}
 		guard nonceBase.count >= 8 else {
 			throw SegmentError.nonceTooShortForDerivedMode(nonceBase.count)
 		}
@@ -77,6 +130,8 @@ public enum Segment {
 		plaintext: [UInt8],
 		nonce: [UInt8]
 	) throws -> (nonce: [UInt8], ciphertext: [UInt8]) {
+		try checkNonceMode(.random, schedule: schedule)
+		try checkSegmentMax(length: plaintext.count, schedule: schedule)
 		let key = schedule.segmentKey(index: position.index)
 		let aad = aadRandomMode(
 			position: position, associatedData: associatedData, kdf: schedule.kdf)
@@ -93,6 +148,9 @@ public enum Segment {
 		nonce: [UInt8],
 		ciphertext: [UInt8]
 	) throws -> [UInt8] {
+		try checkNonceMode(.random, schedule: schedule)
+		try checkSegmentMax(
+			length: ciphertext.count - schedule.aead.tagLength, schedule: schedule)
 		let key = schedule.segmentKey(index: position.index)
 		let aad = aadRandomMode(
 			position: position, associatedData: associatedData, kdf: schedule.kdf)
@@ -102,12 +160,40 @@ public enum Segment {
 
 	/// Encrypt one segment in derived nonce mode, returning `ct || tag`. No nonce is
 	/// stored; it is recomputed from `nonce_base` and the position.
+	///
+	/// On a write-once (`SEAL-RO-v1`) schedule with a non-MRAE AEAD this entry point
+	/// refuses to encrypt (``SegmentError/writeOnceRequiresMeteredEncryptor``): §4.5.3.2
+	/// licenses that pairing only under a one-encryption-per-segment discipline, which an
+	/// unmetered static cannot uphold. Use
+	/// ``PayloadEncryptor/encryptDerived(position:associatedData:plaintext:)``, which
+	/// meters the discipline and hard-stops rewrites even under ``BudgetPolicy/warn``.
 	public static func encryptDerived(
 		schedule: PayloadSchedule,
 		position: SegmentPosition,
 		associatedData: [UInt8],
 		plaintext: [UInt8]
 	) throws -> [UInt8] {
+		try checkNonceMode(.derived, schedule: schedule)
+		guard !(schedule.isWriteOnceProfile && !schedule.aead.isMRAE) else {
+			throw SegmentError.writeOnceRequiresMeteredEncryptor
+		}
+		return try encryptDerivedUnmetered(
+			schedule: schedule, position: position, associatedData: associatedData,
+			plaintext: plaintext)
+	}
+
+	/// The unmetered derived-mode encryption core. Internal: ``PayloadEncryptor`` calls
+	/// this after charging the §5.9 budget — the metering is what licenses the
+	/// write-once non-MRAE pairing; every external caller goes through
+	/// ``encryptDerived(schedule:position:associatedData:plaintext:)``, which gates it.
+	static func encryptDerivedUnmetered(
+		schedule: PayloadSchedule,
+		position: SegmentPosition,
+		associatedData: [UInt8],
+		plaintext: [UInt8]
+	) throws -> [UInt8] {
+		try checkNonceMode(.derived, schedule: schedule)
+		try checkSegmentMax(length: plaintext.count, schedule: schedule)
 		guard let nonceBaseKey = schedule.nonceBase else {
 			throw SegmentError.missingNonceBase
 		}
@@ -126,6 +212,9 @@ public enum Segment {
 		associatedData: [UInt8],
 		ciphertext: [UInt8]
 	) throws -> [UInt8] {
+		try checkNonceMode(.derived, schedule: schedule)
+		try checkSegmentMax(
+			length: ciphertext.count - schedule.aead.tagLength, schedule: schedule)
 		guard let nonceBaseKey = schedule.nonceBase else {
 			throw SegmentError.missingNonceBase
 		}

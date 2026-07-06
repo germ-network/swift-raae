@@ -25,6 +25,21 @@ public enum SuiteRegistry {
 		default: nil
 		}
 	}
+
+	/// Whether a `snap_id` is a known Table-9 code point. There is no snapshot backend
+	/// type to resolve — ``MaskedMultisetHash`` is the only authenticator — so unlike
+	/// ``aead(id:)``/``kdf(id:)`` this is a validity predicate rather than a factory.
+	public static func isKnownSnapID(_ id: UInt16) -> Bool {
+		id == SnapID.none || id == SnapID.maskedMultisetHash
+	}
+}
+
+/// `snap_id` code points (draft Table 9).
+public enum SnapID {
+	/// No snapshot authenticator.
+	public static let none: UInt16 = 0x0000
+	/// Masked multiset hash (§4.7.4).
+	public static let maskedMultisetHash: UInt16 = 0x0001
 }
 
 /// Profile protocol identifiers (draft §4.10.2).

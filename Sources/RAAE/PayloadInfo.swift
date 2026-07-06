@@ -21,7 +21,10 @@ public struct PayloadInfo: Equatable, Sendable {
 	public var nonceMode: NonceMode
 	/// `r ∈ [0, 63]`; each epoch covers `2^r` consecutive segments.
 	public var epochLength: UInt8
-	/// Per-content salt, exactly 32 octets.
+	/// Per-content salt, exactly 32 octets. Must be unique per object under a given
+	/// CEK: two objects sharing `(CEK, payload_info)` — salt included — share their
+	/// entire key schedule, making segments (or whole objects) mutually substitutable
+	/// with valid commitments and snapshots. Generate fresh random octets per object.
 	public var salt: [UInt8]
 
 	public init(

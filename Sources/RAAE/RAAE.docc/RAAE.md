@@ -23,18 +23,18 @@ let info = PayloadInfo(
     snapID: 0x0001,   // masked multiset hash
     nonceMode: .random,
     epochLength: 1,
-    salt: salt)       // 32 random octets
+    salt: salt)       // 32 random octets, unique per object
 
 // 2. Derive the key schedule from the 32-octet CEK.
 let schedule = try PayloadSchedule(
     protocolID: ProtocolID.mutable, cek: cek, payloadInfo: info)
 
-// 3. Encrypt a segment (random nonce mode).
+// 3. Encrypt a segment (random nonce mode) through the metered encryptor: it
+//    generates the nonce, returns it for storage, and tracks the §5.9 budget.
+let encryptor = PayloadEncryptor(schedule: schedule)
 let pos = SegmentPosition(index: 0, isFinal: true)
-let nonce = Segment.freshNonce(for: schedule.aead)
-let (_, ciphertext) = try Segment.encryptRandom(
-    schedule: schedule, position: pos, associatedData: [],
-    plaintext: plaintext, nonce: nonce)
+let (nonce, ciphertext) = try encryptor.encryptRandom(
+    position: pos, associatedData: [], plaintext: plaintext)
 
 // 4. Authenticate the whole set with a snapshot.
 let hash = MaskedMultisetHash(schedule: schedule)
@@ -45,6 +45,29 @@ let snapshot = hash.snapshotValue(
 
 > Warning: Pre-release, tracking an early individual Internet-Draft. The API is
 > unstable and the implementation is unaudited — not for production use.
+
+## Host obligations
+
+The engine authenticates what it is given; several properties can only be provided by
+the host storing the object:
+
+- **Unique `(CEK, salt)` per object.** Two objects sharing a CEK and `payload_info`
+  (salt included) share their entire key schedule: segments — or the whole object —
+  become mutually substitutable, with valid commitments and snapshots. Generate a
+  fresh random 32-octet salt (or a fresh CEK) for every object.
+- **Verify before decrypting.** Obtain decrypt-side schedules via
+  ``PayloadSchedule/startDecrypt(protocolID:cek:payloadInfo:publishedCommitment:expectedCommitmentLength:)``
+  (§4.6) and verify the snapshot before trusting the segment set (§4.9.1.2).
+- **Snapshot freshness.** A complete old `(segments, snapshot)` pair verifies — the
+  snapshot proves set integrity, not recency. Rollback protection requires the host
+  to bind the snapshot to a version, or store it authenticated out of band.
+- **Publish only ``MaskedMultisetHash/snapshotValue(segmentCount:accumulator:)``.**
+  The raw accumulator (kept for O(1) rewrites) is unmasked internal state; store it
+  privately.
+- **Persist usage counters.** ``PayloadEncryptor`` meters a single live writer.
+  Resuming an object in another process requires seeding
+  ``PayloadEncryptor/persistableState`` (§5.9.5); concurrent writers need external
+  coordination.
 
 ## Topics
 
@@ -61,7 +84,7 @@ let snapshot = hash.snapshotValue(
 
 ### Safe decryption
 
-- ``PayloadSchedule/startDecrypt(protocolID:cek:payloadInfo:publishedCommitment:)``
+- ``PayloadSchedule/startDecrypt(protocolID:cek:payloadInfo:publishedCommitment:expectedCommitmentLength:)``
 - ``PayloadSchedule/verifyCommitment(_:)``
 
 ### Usage limits

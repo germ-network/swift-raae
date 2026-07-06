@@ -77,7 +77,8 @@ other field (no separate extra prefix).
   `0x0010` AEGIS-128L, `0x0011` AEGIS-256 (+ AES-256-GCM-SIV for MRAE).
   For all Table-7 AEADs: `C_i = ct_i || tag_i`, tag is the final `Nt` octets.
 - KDF: `0x0001` HKDF-SHA-256, `0x0002` HKDF-SHA-512, `0x0013` TurboSHAKE-256.
-- `snap_id` (Table 9): `0x0000` none, `0x0001` masked multiset hash.
+- `snap_id` (Table 9): `0x0000` none, `0x0001` masked multiset hash. Unknown values
+  are rejected in `PayloadSchedule.init` (like unknown `aead_id`/`kdf_id`).
 - `nonce_mode` (Table 10): `0x00` random, `0x01` derived.
 
 **Table 7 (AEAD) — verified IANA code points, NOT sequential:**
@@ -100,6 +101,9 @@ other field (no separate extra prefix).
 
 `nonce(i) = nonce_base XOR ((i<<1)|is_final)`, where the value is encoded big-endian and
 XORed into the **low 8 octets** of the `Nn`-octet `nonce_base` (requires `Nn ≥ 8`).
+`(i<<1)|is_final` must fit 64 bits, so derived mode rejects `i ≥ 2^63` (a larger index
+would silently drop its top bit and alias the nonce of `i − 2^63` — never under the same
+epoch key for `r ≤ 63`, but the injectivity assumption should not rest on that).
 
 ## payload_info wire layout (§4 / Table refs)
 
@@ -187,10 +191,23 @@ vector's fixed nonce to pin the ciphertext in both directions.
   `nonce_mode = derived` with a non-MRAE AEAD — except under `SEAL-RO-v1`
   (`ProtocolID.immutable`), the write-once profile, where §4.5.3.2 permits the pairing
   because each segment is encrypted exactly once. Unknown protocol IDs are treated as
-  rewritable (strict). The write-once discipline itself is the caller's obligation;
-  `PayloadEncryptor` meters it for a single live writer (per-segment budget = one
-  encryption, per-epoch-key budget = the epoch's `2^r` indices).
+  rewritable (strict). The write-once non-MRAE pairing is only encryptable through
+  `PayloadEncryptor` (per-segment budget = one encryption, per-epoch-key budget = the
+  epoch's `2^r` indices; the per-segment cap hard-stops under both `enforce` and
+  `warn`) — the unmetered `Segment.encryptDerived` static refuses it with
+  `writeOnceRequiresMeteredEncryptor`, since an unmetered rewrite would reuse the
+  segment's fixed nonce. Decryption is ungated. Cross-process/multi-writer discipline
+  (seeding counters via `persistableState`) remains the host's obligation.
 - **CEK length is fixed at 32 octets** and validated in `PayloadSchedule.init`.
+- **`nonce_mode` is enforced on every segment path.** `Segment.encrypt/decryptRandom`
+  require a random-mode schedule and `encrypt/decryptDerived` a derived-mode one
+  (`nonceModeMismatch`); the mode is committed into the key schedule, so mixing modes
+  under one schedule would emit objects that contradict their `payload_info`.
+- **`segment_max` is enforced on every segment path.** `Segment.encrypt*` rejects
+  plaintexts longer than `segment_max`, and `Segment.decrypt*` rejects `ct||tag` whose
+  implied plaintext (`len − Nt`) exceeds it, before any AEAD work. The §5.9.7.4
+  per-segment budget divides by the `segment_max` block count `L`, so an oversized
+  segment would silently weaken the metered data-volume bound while appearing metered.
 - **Verify-before-decrypt is the recommended/safe path** (§4.6, §4.9.1.2), enforced by
   convention (a documented MUST), not by the type system — the public `init` can still
   build an unverified schedule. `PayloadSchedule.startDecrypt(...)` re-derives at the
@@ -198,6 +215,10 @@ vector's fixed nonce to pin the ciphertext in both directions.
   `verifyCommitment(_:)` is the standalone check. A mismatch throws
   `CommitmentError.commitmentMismatch` and the caller MUST abandon decryption (dropping the
   rejected schedule scrubs its zeroizing keys, meeting the §4.6 SHOULD).
+- **Commitment length: keep the default `Nh`.** The §4.6 floor of 16 octets bounds
+  the key-committing property at ~2^64 (birthday on the truncated output) against
+  multi-key / invisible-salamander-style adversaries. The default full-`Nh`
+  commitment is the recommendation; the floor exists for interop, not as a target.
 - **Derived keys are not on the public API** (§5.8): `payloadKey`/`snapKey`/`nonceBase`
   and per-segment keys are internal and held as zeroizing `SymmetricKey` (scrubbed when
   the last reference is released). `AEAD.seal/open` take `SymmetricKey`. Honest limit: each
@@ -208,9 +229,16 @@ vector's fixed nonce to pin the ciphertext in both directions.
 - **Usage budgets (§5.9)** are exposed via `PayloadSchedule.usageBudget(...)` (log2
   bounds) and enforced opt-in by `PayloadEncryptor` (warn/enforce), which meters
   per-epoch-key (and, derived, per-segment) encryptions and delegates to the byte-exact
-  `Segment` statics. The `maxEpochKeysLog2` ceiling (§5.9.6) is advisory and not metered.
+  `Segment` statics. The metered random-mode path generates its own nonce and returns
+  it — the §5.9.7.1 budget assumes uniformly random nonces, so the meter must own
+  generation; pinned nonces (vectors) go through the unmetered `Segment` static. The `maxEpochKeysLog2` ceiling (§5.9.6) is advisory and not metered.
   Cross-process accounting (snapshot via `persistableState`, restore via `seed`) and the
   decrypt-side forgery bound are the host's responsibility.
+- **Host obligations are documented on the DocC landing page** (and on the relevant
+  symbols): unique `(CEK, salt)` per object (shared schedules make objects mutually
+  substitutable), snapshot freshness/rollback (an old `(segments, snapshot)` pair
+  replays — SnapVerify proves set integrity, not recency), publish only the masked
+  `snapshotValue` (never the raw accumulator), and cross-process budget persistence.
 
 ## Stage-1 scope
 

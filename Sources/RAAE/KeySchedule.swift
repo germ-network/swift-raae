@@ -33,7 +33,11 @@ public struct PayloadSchedule {
 	/// by `PayloadEncryptor` for a single live writer).
 	public var isWriteOnceProfile: Bool { protocolID == ProtocolID.immutable }
 
-	/// Minimum commitment length (§4.6).
+	/// Minimum commitment length (§4.6). At this 16-octet draft floor the
+	/// key-committing property has only ~2^64 collision resistance — a multi-key
+	/// adversary searching for two CEKs sharing one commitment works at the birthday
+	/// bound of the truncated output. Keep the default full-`Nh` commitment unless an
+	/// interop profile demands the floor.
 	public static let minCommitmentLength = 16
 
 	/// Largest commitment length a given KDF can safely produce: bounded by HKDF's `255·Nh`
@@ -50,6 +54,10 @@ public struct PayloadSchedule {
 	public enum ScheduleError: Error, Equatable {
 		case unsupportedAEAD(UInt16)
 		case unsupportedKDF(UInt16)
+		/// `snap_id` was not a known Table-9 code point (``SnapID``). Unknown values are
+		/// rejected like unknown `aead_id`/`kdf_id` — the field is committed into the
+		/// KDF, so silently accepting one would bind parameters this build cannot honor.
+		case unsupportedSnapID(UInt16)
 		case commitmentTooShort(Int)
 		/// Commitment length exceeded what the KDF can emit / the framing can encode
 		/// (`min(255·Nh, 0xFFFE)`). Rejected up front so an over-long (e.g. attacker-supplied)
@@ -88,6 +96,9 @@ public struct PayloadSchedule {
 	/// - Parameter commitmentLength: defaults to the KDF's `Nh`; must be in
 	///   `[16, min(255·Nh, 0xFFFE)]`. Out-of-range values throw
 	///   ``ScheduleError/commitmentTooShort(_:)`` / ``ScheduleError/commitmentTooLong(_:)``.
+	///   Keep the default: truncation halves the committing property's bits (the
+	///   16-octet floor leaves ~2^64 collision resistance against multi-key
+	///   adversaries; see ``minCommitmentLength``).
 	public init(
 		protocolID: [UInt8],
 		cek: [UInt8],
@@ -103,6 +114,9 @@ public struct PayloadSchedule {
 		}
 		guard let kdf = SuiteRegistry.kdf(id: payloadInfo.kdfID) else {
 			throw ScheduleError.unsupportedKDF(payloadInfo.kdfID)
+		}
+		guard SuiteRegistry.isKnownSnapID(payloadInfo.snapID) else {
+			throw ScheduleError.unsupportedSnapID(payloadInfo.snapID)
 		}
 		// Derived nonce mode fixes each segment's nonce, so a rewrite would reuse it.
 		// §4.5.3.2: with a non-MRAE AEAD the mode MUST be confined to a write-once
@@ -154,7 +168,7 @@ public struct PayloadSchedule {
 
 	/// Verify a published commitment against this schedule's, in constant time (§4.6).
 	///
-	/// A reader **MUST** call this (or obtain the schedule via ``startDecrypt(protocolID:cek:payloadInfo:publishedCommitment:)``)
+	/// A reader **MUST** call this (or obtain the schedule via ``startDecrypt(protocolID:cek:payloadInfo:publishedCommitment:expectedCommitmentLength:)``)
 	/// and abandon decryption on a throw — a mismatch means the wrong CEK or parameters and
 	/// MUST be treated as an authentication failure for the object.
 	public func verifyCommitment(_ published: [UInt8]) throws {
