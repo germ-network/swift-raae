@@ -87,6 +87,36 @@ struct CommitmentVerifyTests {
 		}
 	}
 
+	@Test func startDecryptRejectsOverLongCommitmentWithoutCrashing() throws {
+		let (cek, info, _, _) = try e1()
+		// The published commitment is untrusted on the decrypt path. An over-long value must
+		// fail as a typed error, not trap in Bytes.uint16 / HKDF.expand before verification.
+		// 8161 exercises the HKDF window (> 255·Nh = 8160 for HKDF-SHA-256); 70000 the uint16
+		// window (> 0xFFFF).
+		for tooLong in [8161, 70_000] {
+			#expect(throws: PayloadSchedule.ScheduleError.commitmentTooLong(tooLong)) {
+				_ = try PayloadSchedule.startDecrypt(
+					protocolID: ProtocolID.mutable, cek: cek, payloadInfo: info,
+					publishedCommitment: [UInt8](repeating: 0, count: tooLong))
+			}
+		}
+	}
+
+	@Test func initAcceptsCommitmentAtKDFMaximumAndRejectsOneMore() throws {
+		let (cek, info, _, _) = try e1()
+		// 255·Nh (8160 for HKDF-SHA-256) is the largest derivable commitment: it must derive
+		// successfully, and one octet more must be rejected rather than crash.
+		let schedule = try PayloadSchedule(
+			protocolID: ProtocolID.mutable, cek: cek, payloadInfo: info,
+			commitmentLength: 8160)
+		#expect(schedule.commitment.count == 8160)
+		#expect(throws: PayloadSchedule.ScheduleError.commitmentTooLong(8161)) {
+			_ = try PayloadSchedule(
+				protocolID: ProtocolID.mutable, cek: cek, payloadInfo: info,
+				commitmentLength: 8161)
+		}
+	}
+
 	@Test func verifyCommitmentRoundTripAndLengthMismatch() throws {
 		let (cek, info, commitment, _) = try e1()
 		let schedule = try PayloadSchedule(
