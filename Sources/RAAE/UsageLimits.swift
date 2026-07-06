@@ -135,16 +135,22 @@ public final class PayloadEncryptor {
 			&& schedule.payloadInfo.nonceMode == .derived
 	}
 
-	/// Random-mode segment encryption with accounting. Pass a fresh nonce
-	/// (``Segment/freshNonce(for:)``).
+	/// Random-mode segment encryption with accounting, returning the freshly generated
+	/// nonce alongside `ct || tag`.
+	///
+	/// The nonce is generated internally (``Segment/freshNonce(for:)``): the §5.9.7.1
+	/// budget this encryptor meters assumes every encryption uses a fresh uniformly
+	/// random nonce, which a caller-supplied nonce could silently violate without the
+	/// meter noticing. Callers that must pin a nonce (test vectors, interop
+	/// reproduction) use the unmetered
+	/// ``Segment/encryptRandom(schedule:position:associatedData:plaintext:nonce:)``.
 	public func encryptRandom(
-		position: SegmentPosition, associatedData: [UInt8], plaintext: [UInt8],
-		nonce: [UInt8]
+		position: SegmentPosition, associatedData: [UInt8], plaintext: [UInt8]
 	) throws -> (nonce: [UInt8], ciphertext: [UInt8]) {
 		try charge(position: position)
 		return try Segment.encryptRandom(
 			schedule: schedule, position: position, associatedData: associatedData,
-			plaintext: plaintext, nonce: nonce)
+			plaintext: plaintext, nonce: Segment.freshNonce(for: schedule.aead))
 	}
 
 	/// Derived-mode segment encryption with accounting. This is the only sanctioned

@@ -117,8 +117,7 @@ struct SegmentMaxTests {
 			_ = try encryptor.encryptRandom(
 				position: SegmentPosition(index: 0, isFinal: true),
 				associatedData: [],
-				plaintext: overMax,
-				nonce: Segment.freshNonce(for: schedule.aead))
+				plaintext: overMax)
 		}
 	}
 }
