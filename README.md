@@ -85,8 +85,8 @@ HKDF-SHA-256/384/512. AEGIS and TurboSHAKE are documented future work
 ([`Spec/STAGE4-FEASIBILITY.md`](Spec/STAGE4-FEASIBILITY.md)).
 
 Every cryptographic stage is validated **byte-exact** against the draft's Appendix E
-test vectors (vendored under `Tests/RAAETests/Vectors/`): E.1, E.3, E.7, E.14.1, E.15.1,
-and the E.17.1 negative case.
+test vectors (vendored under `Tests/RAAETests/Vectors/`): E.1, E.5, E.9, E.16.1, E.17.1,
+and the E.20.1 negative case.
 
 ## Contributing and Collaboration
 

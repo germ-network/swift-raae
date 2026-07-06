@@ -1,7 +1,8 @@
 # Normative transcription — KDF layer (Stage 1)
 
-Transcribed from the vendored draft snapshot (see `SOURCE.md`, 2026-06-26). Section
-numbers refer to that snapshot and may drift. **This is the authority for the code, not
+Transcribed from the vendored draft snapshot (see `SOURCE.md`; originally 2026-06-26,
+vector numbering updated to the 2026-07-06 refresh). Section numbers refer to that
+snapshot and may drift. **This is the authority for the code, not
 the plan's prose** (the plan was written from a summary and had label errors — noted
 below).
 
@@ -92,7 +93,8 @@ other field (no separate extra prefix).
 `0x0003` HKDF-SHA-512 (Nh 64), `0x0013` TurboSHAKE-256 (Nh 64, one-step).
 
 > ⚠️ The summary-based plan mis-stated these: it had ChaCha at `0x0003` and HKDF-SHA-512
-> at `0x0002`. The E.3 ChaCha vector caught both. Always take ids from this table.
+> at `0x0002`. The E.5 ChaCha vector (E.3 in the 2026-06-26 snapshot) caught both.
+> Always take ids from this table.
 
 ### Derived nonce (§4.5.3)
 
@@ -149,7 +151,7 @@ segment_aad(i, is_final, A_i):
 `C_i = AEAD.Encrypt(segment_key(i), nonce(i), segment_aad(i,is_final,A_i), P_i)`, split
 into `ct_i || tag_i`. Decrypt reverses it; AEAD auth failure ⇒ decryption error.
 
-### Masked multiset hash snapshot (§4.7.4) — verified vs E.1/E.7/E.14
+### Masked multiset hash snapshot (§4.7.4) — verified vs E.1/E.9/E.16.1
 
 ```
 contrib(i)   = KDF(protocol_id, "acc_contrib",  [snap_key], [uint64(i), tag(i)], Nh)
@@ -180,10 +182,14 @@ vector's fixed nonce to pin the ciphertext in both directions.
 - **Segment AAD framing uses the real `LH`.** `Segment.aad*Mode` takes the message KDF so
   over-large `A_i` (> 65534 octets) frames to `0xFFFF || LH(A_i)`, not a stub — otherwise
   distinct large associated-data values would collide.
-- **Derived nonce mode requires an MRAE AEAD.** `PayloadSchedule.init` rejects
-  `nonce_mode = derived` unless the AEAD is MRAE (`AEAD.isMRAE`; today only
-  AES-256-GCM-SIV). A rewrite reuses a segment's fixed nonce, so non-MRAE there is unsafe.
-  (Write-once profiles could relax this later behind an explicit opt-in.)
+- **Derived nonce mode requires an MRAE AEAD under rewritable profiles.** A rewrite
+  reuses a segment's fixed nonce, so `PayloadSchedule.init` rejects
+  `nonce_mode = derived` with a non-MRAE AEAD — except under `SEAL-RO-v1`
+  (`ProtocolID.immutable`), the write-once profile, where §4.5.3.2 permits the pairing
+  because each segment is encrypted exactly once. Unknown protocol IDs are treated as
+  rewritable (strict). The write-once discipline itself is the caller's obligation;
+  `PayloadEncryptor` meters it for a single live writer (per-segment budget = one
+  encryption, per-epoch-key budget = the epoch's `2^r` indices).
 - **CEK length is fixed at 32 octets** and validated in `PayloadSchedule.init`.
 - **Verify-before-decrypt is the recommended/safe path** (§4.6, §4.9.1.2), enforced by
   convention (a documented MUST), not by the type system — the public `init` can still

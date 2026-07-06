@@ -11,8 +11,8 @@ a `seal`/`open` API mirroring `AES.GCM`, plus `Nonce(data:)` and
 
 Decision: **implement** (`AEAD_GCMSIV.swift`). This is the MRAE suite SEAL needs for
 derived-mode rewrites, and it is a vetted implementation — no hand-rolled crypto.
-Verified byte-exact against Appendix **E.15.1** (derived nonces, deterministic
-re-encryption, and the same-nonce rewrite).
+Verified byte-exact against Appendix **E.17.1** (E.15.1 in the 2026-06-26 snapshot;
+derived nonces, deterministic re-encryption, and the same-nonce rewrite).
 
 ## AEGIS-128L / AEGIS-256 (`0x0020` / `0x0021`) — CUT from v1 ❌
 

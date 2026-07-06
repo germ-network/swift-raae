@@ -5,9 +5,9 @@ import Testing
 
 @Suite("Multi-segment + ChaCha20 + derived nonce")
 struct MultiSegmentVectorTests {
-	/// E.3 exercises the corrected ChaCha20-Poly1305 code point (0x001D).
-	@Test func chaCha20SingleSegmentMatchesE3() throws {
-		let v = try Vectors.load("E3")
+	/// E.5 exercises the corrected ChaCha20-Poly1305 code point (0x001D).
+	@Test func chaCha20SingleSegmentMatchesE5() throws {
+		let v = try Vectors.load("E5")
 		let schedule = try Vectors.schedule(from: v)
 		#expect(schedule.aead.id == 0x001D)
 
@@ -28,10 +28,10 @@ struct MultiSegmentVectorTests {
 		#expect(Hex.encode(ct) == Hex.encode(ctTag))
 	}
 
-	/// E.7 (two segments): each segment decrypts and re-encrypts exactly, and segments
+	/// E.9 (two segments): each segment decrypts and re-encrypts exactly, and segments
 	/// can be processed in any order (random access).
-	@Test func twoSegmentsMatchE7InAnyOrder() throws {
-		let v = try Vectors.load("E7")
+	@Test func twoSegmentsMatchE9InAnyOrder() throws {
+		let v = try Vectors.load("E9")
 		let schedule = try Vectors.schedule(from: v)
 		let segs = v["segments"] as! [[String: Any]]
 
@@ -58,9 +58,9 @@ struct MultiSegmentVectorTests {
 	}
 
 	/// Different epoch indices yield different segment keys; same epoch shares a key
-	/// (E.7 uses epoch_length=1, so segments 0 and 1 share epoch 0).
+	/// (E.9 uses epoch_length=1, so segments 0 and 1 share epoch 0).
 	@Test func epochKeyGroupingMatchesEpochLength() throws {
-		let v = try Vectors.load("E7")
+		let v = try Vectors.load("E9")
 		let schedule = try Vectors.schedule(from: v)
 		#expect(schedule.segmentKey(index: 0) == schedule.segmentKey(index: 1))  // epoch 0
 		#expect(schedule.segmentKey(index: 0) != schedule.segmentKey(index: 2))  // epoch 1
@@ -99,7 +99,7 @@ struct DerivedNonceTests {
 	/// requires for derived mode). Distinct positions get distinct nonces, so this is
 	/// also a self-consistency check on key/nonce/AAD derivation.
 	@Test func derivedModeRoundTrips() throws {
-		var info = Vectors.payloadInfo(from: try Vectors.load("E7"))
+		var info = Vectors.payloadInfo(from: try Vectors.load("E9"))
 		info.nonceMode = .derived
 		info.aeadID = 0x001F  // AES-256-GCM-SIV (MRAE)
 		let schedule = try PayloadSchedule(

@@ -1,6 +1,6 @@
 {
 	"name": "E.1 Single Segment, AES-256-GCM, HKDF-SHA-256, 16384",
-	"source": "draft-sullivan-cfrg-raae Appendix E.1 (2026-06-26 snapshot)",
+	"source": "draft-sullivan-cfrg-raae Appendix E.1 (2026-07-06 snapshot)",
 	"protocol_id": "SEAL-RW-v1",
 	"cek_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	"payload_info": {
