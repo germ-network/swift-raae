@@ -35,6 +35,16 @@ struct SEALSchemeTests {
 		#expect(config.nonceMode == .random)
 	}
 
+	@Test func flatKeyRuleFor256BitNonceSuites() {
+		// Table 15: a 256-bit-nonce suite (AEGIS) uses epoch_length 63 regardless of
+		// the row. No such suite is registered, so pin the rule via the helper the
+		// scheme init routes through.
+		for scheme in SEALScheme.allCases {
+			#expect(scheme.epochLength(forNonceLength: 32) == 63)
+			#expect(scheme.epochLength(forNonceLength: 12) == scheme.epochLength)
+		}
+	}
+
 	@Test func compactRequiresMRAE() throws {
 		#expect(throws: PayloadSchedule.ScheduleError.derivedModeRequiresMRAE(0x0002)) {
 			_ = try SEALConfiguration(scheme: .compact, aeadID: 0x0002, kdfID: 0x0001)

@@ -94,6 +94,14 @@ public enum SEALScheme: CaseIterable, Equatable, Sendable {
 	var epochLength: UInt8 {
 		self == .attachment ? 32 : 16
 	}
+
+	/// Table 15: "A 256-bit-nonce suite (AEGIS-256, AEGIS-256X2) uses a flat key
+	/// (epoch_length 63) regardless of the row." Unreachable today — no 32-octet-
+	/// nonce AEAD is registered — but guarded now so registering one later cannot
+	/// silently produce spec-divergent presets.
+	func epochLength(forNonceLength nonceLength: Int) -> UInt8 {
+		nonceLength == 32 ? 63 : epochLength
+	}
 }
 
 /// A SEAL suite + profile, validated at construction (§4.10.2): the engine's opaque
@@ -140,11 +148,15 @@ public struct SEALConfiguration: Sendable {
 	/// fixes profile, `segment_max`, `nonce_mode`, and epoch length; the cipher suite
 	/// stays caller-chosen. `SEAL-compact` requires an MRAE AEAD (its in-place
 	/// rewrite reuses the derived nonce) and throws
-	/// `ScheduleError.derivedModeRequiresMRAE` otherwise.
+	/// `ScheduleError.derivedModeRequiresMRAE` otherwise. A 256-bit-nonce suite
+	/// takes a flat key (`epoch_length 63`) regardless of the row, per the table.
 	public init(scheme: SEALScheme, aeadID: UInt16, kdfID: UInt16) throws {
+		// An unknown aead_id falls through to the designated init's registry check.
+		let nonceLength = SuiteRegistry.aead(id: aeadID)?.nonceLength ?? 0
 		try self.init(
 			profile: scheme.profile, aeadID: aeadID, kdfID: kdfID,
-			segmentMax: scheme.segmentMax, epochLength: scheme.epochLength,
+			segmentMax: scheme.segmentMax,
+			epochLength: scheme.epochLength(forNonceLength: nonceLength),
 			nonceMode: scheme.nonceMode)
 	}
 
