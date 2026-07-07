@@ -157,7 +157,11 @@ public final class SEALWriter {
 				segmentCount: UInt64(written.count), accumulator: accumulator)
 		}
 		return SealedObject(
-			header: header, snapshot: snapshot, segmentCount: UInt64(written.count))
+			header: header, snapshot: snapshot, segmentCount: UInt64(written.count),
+			usageState: SEALUsageState(
+				epochCounts: epochCounts,
+				segmentWrites: Dictionary(
+					uniqueKeysWithValues: written.map { ($0, UInt64(1)) })))
 	}
 }
 

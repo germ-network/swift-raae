@@ -83,7 +83,8 @@ swift test
 | 4 | AES-256-GCM-SIV (MRAE); AEGIS/TurboSHAKE deferred | ✅ |
 | 5 | Public engine API, DocC, property tests, 0.0.1 | ✅ |
 | SEAL A–B | Two-product split; SEAL configuration + writer/reader lifecycle | ✅ |
-| SEAL C–D | RW rewriter + named instantiations; layouts, hedged nonces | planned |
+| SEAL C | RW rewriter (RewriteSeg + snapshot rebind, E.17.1-pinned); §4.12 scheme presets | ✅ |
+| SEAL D | Serialization layouts, hedged nonces | planned |
 
 Suite coverage: **AEAD** AES-128/256-GCM, ChaCha20-Poly1305, AES-256-GCM-SIV; **KDF**
 HKDF-SHA-256/384/512. AEGIS and TurboSHAKE are documented future work

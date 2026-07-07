@@ -40,6 +40,27 @@ public struct SealedSegment: Equatable, Sendable {
 	}
 }
 
+/// The §5.9.5 usage counters: how many encryptions each epoch key and each segment
+/// has absorbed. Host-private accounting, not part of the stored object — persist it
+/// alongside a `SEAL-RW-v1` object that may be rewritten later, and hand it back to
+/// ``SEALConfiguration/resumeWriting(cek:header:snapshot:segments:usageState:globalAssociatedData:)``
+/// so the budgets survive the freeze. Losing it means the object must stay frozen
+/// (the spec's MUST-track rule): the engine cannot reconstruct how many encryptions
+/// a key has already absorbed.
+public struct SEALUsageState: Equatable, Sendable {
+	/// Encryptions per epoch index (`index >> epoch_length`).
+	public var epochCounts: [UInt64: UInt64]
+	/// Encryptions per segment index (the §5.9.7.4 hot-rewrite pool in derived mode).
+	public var segmentWrites: [UInt64: UInt64]
+
+	public init(
+		epochCounts: [UInt64: UInt64] = [:], segmentWrites: [UInt64: UInt64] = [:]
+	) {
+		self.epochCounts = epochCounts
+		self.segmentWrites = segmentWrites
+	}
+}
+
 /// The result of ``SEALWriter/finalize()``: everything a host stores besides the
 /// segments themselves.
 public struct SealedObject: Equatable, Sendable {
@@ -49,4 +70,7 @@ public struct SealedObject: Equatable, Sendable {
 	public let snapshot: [UInt8]?
 	/// `n_seg` — the number of segments written.
 	public let segmentCount: UInt64
+	/// The §5.9.5 counters at finalize — persist alongside a rewritable object (see
+	/// ``SEALUsageState``); irrelevant for `SEAL-RO-v1`, which never rewrites.
+	public let usageState: SEALUsageState
 }

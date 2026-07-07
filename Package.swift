@@ -37,7 +37,10 @@ let package = Package(
 		),
 		.testTarget(
 			name: "SEALTests",
-			dependencies: ["SEAL"]
+			dependencies: ["SEAL"],
+			resources: [
+				.copy("Vectors")
+			]
 		),
 	]
 )

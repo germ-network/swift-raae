@@ -38,6 +38,65 @@ public enum SEALError: Error, Equatable {
 	/// A segment's stored-nonce metadata is inconsistent with the configuration's
 	/// nonce mode (`Np = Nn` in random mode, `Np = 0` in derived mode).
 	case nonceMetadataMismatch
+	/// ``SEALConfiguration/resumeWriting(cek:header:snapshot:segments:usageState:globalAssociatedData:)``
+	/// on a `SEAL-RO-v1` configuration: "an encryptor MUST NOT rewrite a segment once
+	/// it has been written" (§4.10.2).
+	case writeOnceProfileForbidsRewrite
+	/// `rewrite(_:replacing:)` was handed a segment whose `(index, tag)` is not in
+	/// the set the rewriter verified at resume (unknown index, or a stale copy from
+	/// before an earlier rewrite of the same index).
+	case segmentNotInVerifiedSet(UInt64)
+	/// The §5.9.7.4 per-segment (hot-rewrite) budget would be exceeded. Always a
+	/// hard stop.
+	case segmentBudgetExceeded(index: UInt64, limitLog2: Int)
+}
+
+/// Parameter presets from the spec's named-instantiation table (§4.12, Table 15).
+/// Each row fixes the profile, `segment_max`, `nonce_mode`, and epoch length; the
+/// cipher suite `(aead_id, kdf_id)` stays caller-chosen, e.g.
+/// `SEAL-simple(aead_id, kdf_id)`.
+///
+/// > Important: every spec instantiation also **binds a serialization layout**
+/// > (§4.11: linear for attachment/simple, aligned for memory/compact, split for
+/// > disk), which this engine does not ship — these presets are the instantiations'
+/// > *parameter sets*. A host claiming a named instantiation on the wire must also
+/// > implement its bound layout.
+public enum SEALScheme: CaseIterable, Equatable, Sendable {
+	/// `SEAL-attachment`: write-once content read whole. `SEAL-RO-v1`, 65536,
+	/// derived nonce, epoch_length 32.
+	case attachment
+	/// `SEAL-simple`: the basic mutable object. `SEAL-RW-v1`, 65536, random nonce,
+	/// epoch_length 16.
+	case simple
+	/// `SEAL-memory`: in-memory random access. `SEAL-RW-v1`, 16384, random nonce,
+	/// epoch_length 16.
+	case memory
+	/// `SEAL-disk`: per-segment rewrites on stored media. `SEAL-RW-v1`, 16384,
+	/// random nonce, epoch_length 16.
+	case disk
+	/// `SEAL-compact`: aligned random access with no stored nonce (`Np = 0`).
+	/// `SEAL-RW-v1`, 16384, derived nonce, epoch_length 16 — requires an MRAE AEAD
+	/// (an in-place rewrite reuses the derived nonce).
+	case compact
+
+	var profile: SEALProfile {
+		self == .attachment ? .readOnly : .readWrite
+	}
+	var segmentMax: UInt32 {
+		switch self {
+		case .attachment, .simple: 65536
+		case .memory, .disk, .compact: 16384
+		}
+	}
+	var nonceMode: PayloadInfo.NonceMode {
+		switch self {
+		case .attachment, .compact: .derived
+		case .simple, .memory, .disk: .random
+		}
+	}
+	var epochLength: UInt8 {
+		self == .attachment ? 32 : 16
+	}
 }
 
 /// A SEAL suite + profile, validated at construction (§4.10.2): the engine's opaque
@@ -75,18 +134,53 @@ public struct SEALConfiguration: Sendable {
 		segmentMax: UInt32 = 65536,
 		epochLength: UInt8 = 0
 	) throws {
+		try self.init(
+			profile: profile, aeadID: aeadID, kdfID: kdfID, segmentMax: segmentMax,
+			epochLength: epochLength, nonceMode: nil)
+	}
+
+	/// A configuration from a §4.12 named-instantiation row (Table 15): the scheme
+	/// fixes profile, `segment_max`, `nonce_mode`, and epoch length; the cipher suite
+	/// stays caller-chosen. `SEAL-compact` requires an MRAE AEAD (its in-place
+	/// rewrite reuses the derived nonce) and throws
+	/// `ScheduleError.derivedModeRequiresMRAE` otherwise.
+	public init(scheme: SEALScheme, aeadID: UInt16, kdfID: UInt16) throws {
+		try self.init(
+			profile: scheme.profile, aeadID: aeadID, kdfID: kdfID,
+			segmentMax: scheme.segmentMax, epochLength: scheme.epochLength,
+			nonceMode: scheme.nonceMode)
+	}
+
+	/// Designated initializer. `nonceMode: nil` derives the mode from the profile and
+	/// AEAD (RO ⇒ derived; RW ⇒ the AEAD's Table-9 default); an explicit mode (a
+	/// Table-15 row) is validated against Table 13 — `SEAL-RW-v1` permits a derived
+	/// nonce only with an MRAE AEAD.
+	init(
+		profile: SEALProfile, aeadID: UInt16, kdfID: UInt16, segmentMax: UInt32,
+		epochLength: UInt8, nonceMode: PayloadInfo.NonceMode?
+	) throws {
 		guard let aead = SuiteRegistry.aead(id: aeadID) else {
 			throw PayloadSchedule.ScheduleError.unsupportedAEAD(aeadID)
 		}
 		guard let kdf = SuiteRegistry.kdf(id: kdfID) else {
 			throw PayloadSchedule.ScheduleError.unsupportedKDF(kdfID)
 		}
+		let mode =
+			nonceMode ?? ((profile == .readOnly || aead.isMRAE) ? .derived : .random)
+		// Table 13: RO pins derived; RW admits derived only with an MRAE AEAD.
+		if profile == .readOnly, mode != .derived {
+			throw PayloadSchedule.ScheduleError.invalidProfileTuple(
+				nonceMode: mode, snapID: SnapID.none)
+		}
+		if profile == .readWrite, mode == .derived, !aead.isMRAE {
+			throw PayloadSchedule.ScheduleError.derivedModeRequiresMRAE(aeadID)
+		}
 		self.profile = profile
 		self.aeadID = aeadID
 		self.kdfID = kdfID
 		self.segmentMax = segmentMax
 		self.epochLength = epochLength
-		self.nonceMode = (profile == .readOnly || aead.isMRAE) ? .derived : .random
+		self.nonceMode = mode
 		self.aead = aead
 		self.kdf = kdf
 		// Validate the geometry through the core's own checks (salt is per-object;

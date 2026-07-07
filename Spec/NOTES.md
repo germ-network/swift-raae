@@ -240,8 +240,16 @@ vector's fixed nonce to pin the ciphertext in both directions.
   the SEAL writer, which enforces write-each-index-once structurally — the unmetered
   `Segment.encryptDerived` static refuses it with `writeOnceRequiresMeteredEncryptor`,
   since an unmetered rewrite would reuse the segment's fixed nonce. Decryption is
-  ungated. Cross-process/multi-writer discipline remains the host's obligation
-  (authoring freeze/resume arrives with the Stage-C rewriter).
+  ungated. Cross-process/multi-writer discipline remains the host's obligation.
+- **The SEAL rewriter (`resumeWriting` → `rewrite`, §4.9.2)** verifies the full read
+  path before anything can be rewritten (commitment, then SnapVerify + finality over
+  the presented set), recovers the accumulator by unmasking the verified snapshot
+  (`acc = wrapped_acc XOR mask(n_seg, tag)` — never exposed in either direction),
+  preserves the position including finality, rejects stale segment copies, and
+  continues the §5.9 budgets from the persisted `SEALUsageState` (hard caps,
+  including the §5.9.7.4 hot-rewrite pool). Only constructible for `SEAL-RW-v1`.
+  Pinned byte-exact against the E.17.1 deterministic rewrite (GCM-SIV). `n_seg`
+  never changes; extend/truncate are future work.
 - **CEK length is fixed at 32 octets** and validated in `PayloadSchedule.init`.
 - **Profile tuples (Table 13) are enforced in `PayloadSchedule.init`**: SEAL-RW-v1
   requires `snap_id 0x0001`; SEAL-RO-v1 requires derived nonce + `snap_id 0x0000`
