@@ -104,20 +104,4 @@ struct SegmentMaxTests {
 		}
 	}
 
-	@Test func meteredEncryptorInheritsEnforcement() throws {
-		// PayloadEncryptor delegates to the Segment statics, so the metered path
-		// rejects oversized segments identically.
-		let schedule = try makeSchedule(aeadID: 0x0002, nonceMode: .random)
-		let encryptor = PayloadEncryptor(schedule: schedule)
-		let overMax = [UInt8](repeating: 0x5A, count: Int(Self.segmentMax) + 1)
-		#expect(
-			throws: Segment.SegmentError.exceedsSegmentMax(
-				length: overMax.count, segmentMax: Self.segmentMax)
-		) {
-			_ = try encryptor.encryptRandom(
-				position: SegmentPosition(index: 0, isFinal: true),
-				associatedData: [],
-				plaintext: overMax)
-		}
-	}
 }

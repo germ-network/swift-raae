@@ -31,8 +31,8 @@ public struct PayloadSchedule {
 	/// Whether this schedule's protocol ID selects the write-once profile
 	/// (`SEAL-RO-v1`, §4.10.2): every segment is encrypted exactly once and never
 	/// rewritten. This is what licenses derived nonce mode with a non-MRAE AEAD
-	/// (§4.5.3.2) — the discipline itself is the caller's obligation (and is metered
-	/// by `PayloadEncryptor` for a single live writer).
+	/// (§4.5.3.2) — the SEAL product's writer enforces the discipline structurally
+	/// for a single live writer.
 	public var isWriteOnceProfile: Bool { protocolID == ProtocolID.immutable }
 
 	/// Minimum commitment length (§4.6). At this 16-octet draft floor the

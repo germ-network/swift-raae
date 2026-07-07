@@ -114,10 +114,11 @@ let pt     = try reader.decrypt(seg, associatedData: [])
   "documented MUST" becomes the type system. `verify(snapshot:)` implements the full
   §4.9.1.2 read check including the finality rule ("reject if the highest-indexed
   segment lacks is_final = 1"), which nothing in the current package enforces.
-  Under RO (`snap_id = none`) the snapshot verify is absent by type, but the
-  finality rule still applies — §4.10.2: "truncation detection rests on the finality
-  bit alone" — so the RO reader keeps a completeness check over the claimed
-  positions (cryptographically confirmed when the final segment is decrypted).
+  Under RO (`snap_id = none`) `verifySnapshot` refuses with a typed error
+  (`noSnapshotAuthenticator` — one reader type, not two), but the finality rule
+  still applies — §4.10.2: "truncation detection rests on the finality bit alone" —
+  so `verifyFinality(positions:)` checks the claimed positions in both profiles
+  (cryptographically confirmed when the final segment is decrypted).
 - Freshness/rollback remains a host obligation (spec: snapshot proves set integrity,
   not recency) — documented on `verify`, unchanged from F7.
 

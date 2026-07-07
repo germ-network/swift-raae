@@ -123,8 +123,8 @@ public enum Segment {
 	///
 	/// The nonce is caller-supplied — the pinned-nonce seam the byte-exact KATs and the
 	/// SEAL engine build on. `package`-scoped: outside this package, random-mode
-	/// encryption goes through a nonce-generating wrapper (`PayloadEncryptor` today,
-	/// the SEAL writer once it lands), so a consumer can never reuse a nonce here.
+	/// encryption goes through the SEAL writer, which generates the nonce itself, so a
+	/// consumer can never reuse one here.
 	package static func encryptRandom(
 		schedule: PayloadSchedule,
 		position: SegmentPosition,
@@ -166,9 +166,9 @@ public enum Segment {
 	/// On a write-once (`SEAL-RO-v1`) schedule with a non-MRAE AEAD this entry point
 	/// refuses to encrypt (``SegmentError/writeOnceRequiresMeteredEncryptor``): §4.5.3.2
 	/// licenses that pairing only under a one-encryption-per-segment discipline, which an
-	/// unmetered static cannot uphold. Use
-	/// ``PayloadEncryptor/encryptDerived(position:associatedData:plaintext:)``, which
-	/// meters the discipline and hard-stops rewrites even under ``BudgetPolicy/warn``.
+	/// unmetered static cannot uphold. Author write-once objects through the SEAL
+	/// product's writer, which enforces the discipline structurally (each index is
+	/// written exactly once).
 	public static func encryptDerived(
 		schedule: PayloadSchedule,
 		position: SegmentPosition,
@@ -184,11 +184,11 @@ public enum Segment {
 			plaintext: plaintext)
 	}
 
-	/// The unmetered derived-mode encryption core. `package`-scoped: ``PayloadEncryptor``
-	/// (and the SEAL writer once it lands) calls this after charging the §5.9 budget —
-	/// the metering is what licenses the write-once non-MRAE pairing; every external
-	/// caller goes through ``encryptDerived(schedule:position:associatedData:plaintext:)``,
-	/// which gates it.
+	/// The unmetered derived-mode encryption core. `package`-scoped: the SEAL writer
+	/// calls this after enforcing its write-each-index-once discipline and the §5.9
+	/// budget — the metering is what licenses the write-once non-MRAE pairing; every
+	/// external caller goes through
+	/// ``encryptDerived(schedule:position:associatedData:plaintext:)``, which gates it.
 	package static func encryptDerivedUnmetered(
 		schedule: PayloadSchedule,
 		position: SegmentPosition,

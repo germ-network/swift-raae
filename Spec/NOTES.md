@@ -237,12 +237,11 @@ vector's fixed nonce to pin the ciphertext in both directions.
   (`ProtocolID.immutable`), the write-once profile, where §4.5.3.2 permits the pairing
   because each segment is encrypted exactly once. Unknown protocol IDs are treated as
   rewritable (strict). The write-once non-MRAE pairing is only encryptable through
-  `PayloadEncryptor` (per-segment budget = one encryption, per-epoch-key budget = the
-  epoch's `2^r` indices; the per-segment cap hard-stops under both `enforce` and
-  `warn`) — the unmetered `Segment.encryptDerived` static refuses it with
-  `writeOnceRequiresMeteredEncryptor`, since an unmetered rewrite would reuse the
-  segment's fixed nonce. Decryption is ungated. Cross-process/multi-writer discipline
-  (seeding counters via `persistableState`) remains the host's obligation.
+  the SEAL writer, which enforces write-each-index-once structurally — the unmetered
+  `Segment.encryptDerived` static refuses it with `writeOnceRequiresMeteredEncryptor`,
+  since an unmetered rewrite would reuse the segment's fixed nonce. Decryption is
+  ungated. Cross-process/multi-writer discipline remains the host's obligation
+  (authoring freeze/resume arrives with the Stage-C rewriter).
 - **CEK length is fixed at 32 octets** and validated in `PayloadSchedule.init`.
 - **Profile tuples (Table 13) are enforced in `PayloadSchedule.init`**: SEAL-RW-v1
   requires `snap_id 0x0001`; SEAL-RO-v1 requires derived nonce + `snap_id 0x0000`
@@ -276,14 +275,13 @@ vector's fixed nonce to pin the ciphertext in both directions.
   any register/stack copies are not scrubbable — we bound the *long-lived* secret to one
   zeroizing buffer, not zero copies.
 - **Usage budgets (§5.9)** are exposed via `PayloadSchedule.usageBudget(...)` (log2
-  bounds) and enforced opt-in by `PayloadEncryptor` (warn/enforce), which meters
-  per-epoch-key (and, derived, per-segment) encryptions and delegates to the byte-exact
-  `Segment` statics. The metered random-mode path generates its own nonce and returns
-  it — the §5.9.7.1 budget assumes uniformly random nonces, so the meter must own
-  generation. The pinned-nonce seam (`Segment.encryptRandom(... nonce:)`, and the
-  unmetered derived core) is `package`-scoped: reachable by the byte-exact KATs and
-  the SEAL engine target, never by consumers (see `Spec/SEAL-ENGINE-PLAN.md`). The `maxEpochKeysLog2` ceiling (§5.9.6) is advisory and not metered.
-  Cross-process accounting (snapshot via `persistableState`, restore via `seed`) and the
+  bounds) and enforced with hard caps (no warn mode) by the SEAL writer, which owns
+  nonce generation — the §5.9.7.1 budget assumes uniformly random nonces — and
+  delegates to the byte-exact `Segment` statics. The pinned-nonce seam
+  (`Segment.encryptRandom(... nonce:)`, and the unmetered derived core) is
+  `package`-scoped: reachable by the byte-exact KATs and the SEAL engine target,
+  never by consumers (see `Spec/SEAL-ENGINE-PLAN.md`). The `maxEpochKeysLog2`
+  ceiling (§5.9.6) is advisory and not metered. Cross-process accounting and the
   decrypt-side forgery bound are the host's responsibility.
 - **Host obligations are documented on the DocC landing page** (and on the relevant
   symbols): unique `(CEK, salt)` per object (shared schedules make objects mutually

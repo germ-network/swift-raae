@@ -10,9 +10,15 @@ import RAAE
 /// the raw accumulator never crosses the API boundary. The granular `RAAE` product
 /// remains available for implementers and vector tooling.
 ///
-/// > Warning: Stage-A scaffold (see `Spec/SEAL-ENGINE-PLAN.md`): this module currently
-/// > ships the profile type and engine caps. The configuration, writer, and reader
-/// > land in Stage B; until then, encryption goes through `RAAE.PayloadEncryptor`.
+/// A typical flow: build a ``SEALConfiguration``, author with
+/// ``SEALConfiguration/startEncryption(cek:globalAssociatedData:)`` →
+/// ``SEALWriter``, and read with
+/// ``SEALConfiguration/startDecryption(cek:header:globalAssociatedData:)`` →
+/// ``SEALReader``. In-place rewriting (`SEAL-RW-v1`) arrives with the Stage-C
+/// rewriter (see `Spec/SEAL-ENGINE-PLAN.md`).
+///
+/// > Warning: Pre-release, tracking an early individual Internet-Draft. The API is
+/// > unstable and the implementation is unaudited — not for production use.
 public enum SEALProfile: Equatable, Sendable {
 	/// `SEAL-RO-v1` — the immutable write-once profile (§4.10.2): derived nonce mode,
 	/// every segment encrypted exactly once.

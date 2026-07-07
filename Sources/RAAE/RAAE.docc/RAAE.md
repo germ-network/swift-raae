@@ -10,37 +10,37 @@ be encrypted or decrypted on its own, in any order; segments can be rewritten in
 and an optional snapshot authenticator detects added, dropped, reordered, or modified
 segments.
 
-This release ships the verified low-level engine. A typical flow:
+This module is the granular **core** — the byte-exact conformance layer for
+implementers and vector tooling. Most consumers want the **SEAL** product instead
+(`import SEAL`): its engine owns salt/nonce generation, budgets, snapshot accounting,
+and verify-before-decrypt, so the sharp edges below never reach application code.
+
+A decrypt-side flow at this layer (encryption goes through the SEAL writer):
 
 ```swift
 import RAAE
 
-// 1. Describe the message parameters.
+// 1. The message parameters and commitment arrive with the stored object.
 let info = PayloadInfo(
     aeadID: 0x0002,   // AES-256-GCM
     segmentMax: 16384,
     kdfID: 0x0001,    // HKDF-SHA-256
-    snapID: 0x0001,   // masked multiset hash
+    snapID: 0x0001,   // masked multiset hash (required under SEAL-RW-v1)
     nonceMode: .random,
     epochLength: 1,
-    salt: salt)       // 32 random octets, unique per object
+    salt: salt)       // the object's 32-octet salt
 
-// 2. Derive the key schedule from the 32-octet CEK.
-let schedule = try PayloadSchedule(
-    protocolID: ProtocolID.mutable, cek: cek, payloadInfo: info)
+// 2. Re-derive the schedule and verify the commitment BEFORE any decryption.
+let schedule = try PayloadSchedule.startDecrypt(
+    protocolID: ProtocolID.mutable, cek: cek, payloadInfo: info,
+    publishedCommitment: storedCommitment)
 
-// 3. Encrypt a segment (random nonce mode) through the metered encryptor: it
-//    generates the nonce, returns it for storage, and tracks the §5.9 budget.
-let encryptor = PayloadEncryptor(schedule: schedule)
-let pos = SegmentPosition(index: 0, isFinal: true)
-let (nonce, ciphertext) = try encryptor.encryptRandom(
-    position: pos, associatedData: [], plaintext: plaintext)
-
-// 4. Authenticate the whole set with a snapshot.
+// 3. Verify the snapshot over the present segments, then open one.
 let hash = MaskedMultisetHash(schedule: schedule)
-let tags = [(index: UInt64(0), tag: Array(ciphertext.suffix(16)))]
-let snapshot = hash.snapshotValue(
-    segmentCount: 1, accumulator: hash.accumulator(segments: tags))
+guard hash.verify(snapshot: storedSnapshot, segments: presentTags) else { throw ... }
+let plaintext = try Segment.decryptRandom(
+    schedule: schedule, position: SegmentPosition(index: 0, isFinal: true),
+    associatedData: [], nonce: storedNonce, ciphertext: storedCiphertext)
 ```
 
 > Warning: Pre-release, tracking an early individual Internet-Draft. The API is
@@ -64,10 +64,10 @@ the host storing the object:
 - **Publish only ``MaskedMultisetHash/snapshotValue(segmentCount:accumulator:)``.**
   The raw accumulator (kept for O(1) rewrites) is unmasked internal state; store it
   privately.
-- **Persist usage counters.** ``PayloadEncryptor`` meters a single live writer.
-  Resuming an object in another process requires seeding
-  ``PayloadEncryptor/persistableState`` (§5.9.5); concurrent writers need external
-  coordination.
+- **Track usage budgets when driving the core directly.** ``UsageBudget`` states the
+  §5.9 bounds; the SEAL writer meters them with hard caps for a single live writer,
+  and cross-process accounting (§5.9.5) plus concurrent-writer coordination remain
+  the host's job.
 
 ## Topics
 
@@ -90,8 +90,6 @@ the host storing the object:
 ### Usage limits
 
 - ``UsageBudget``
-- ``PayloadEncryptor``
-- ``BudgetPolicy``
 
 ### Snapshot authenticator
 

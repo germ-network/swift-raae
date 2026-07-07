@@ -48,44 +48,11 @@ struct WriteOnceProfileTests {
 		}
 	}
 
-	@Test func writeOnceDerivedRoundTrip() throws {
-		// Multi-segment encrypt/decrypt in the write-once attachment configuration:
-		// SEAL-RO-v1, derived nonces, AES-256-GCM. Encryption goes through the metered
-		// PayloadEncryptor — the unmetered Segment static refuses this pairing (see
-		// rawStaticRefusesUnmeteredWriteOnceEncryption).
-		let schedule = try makeSchedule(protocolID: ProtocolID.immutable, aeadID: 0x0002)
-		let encryptor = PayloadEncryptor(schedule: schedule)
-		let plaintexts: [[UInt8]] = [[1, 2, 3], [4, 5], [6]]
-		var ciphertexts: [[UInt8]] = []
-		for (i, pt) in plaintexts.enumerated() {
-			let pos = SegmentPosition(
-				index: UInt64(i), isFinal: i == plaintexts.count - 1)
-			ciphertexts.append(
-				try encryptor.encryptDerived(
-					position: pos, associatedData: [], plaintext: pt))
-		}
-		for (i, ct) in ciphertexts.enumerated() {
-			let pos = SegmentPosition(
-				index: UInt64(i), isFinal: i == plaintexts.count - 1)
-			let back = try Segment.decryptDerived(
-				schedule: schedule, position: pos, associatedData: [],
-				ciphertext: ct)
-			#expect(back == plaintexts[i])
-		}
-		// A segment presented at the wrong position must fail authentication:
-		// index and finality are bound through the derived nonce.
-		#expect(throws: AEADError.authenticationFailure) {
-			_ = try Segment.decryptDerived(
-				schedule: schedule,
-				position: SegmentPosition(index: 1, isFinal: false),
-				associatedData: [], ciphertext: ciphertexts[0])
-		}
-	}
-
 	@Test func rawStaticRefusesUnmeteredWriteOnceEncryption() throws {
 		// §4.5.3.2 licenses derived + non-MRAE only under a one-encryption-per-segment
 		// discipline; the unmetered static cannot uphold it, so it refuses and steers
-		// to PayloadEncryptor. Decryption is unaffected (no nonce-reuse hazard).
+		// to the SEAL writer (round-trip covered in SEALTests). Decryption is
+		// unaffected (no nonce-reuse hazard).
 		let schedule = try makeSchedule(protocolID: ProtocolID.immutable, aeadID: 0x0002)
 		#expect(throws: Segment.SegmentError.writeOnceRequiresMeteredEncryptor) {
 			_ = try Segment.encryptDerived(
@@ -99,31 +66,6 @@ struct WriteOnceProfileTests {
 		_ = try Segment.encryptDerived(
 			schedule: siv, position: SegmentPosition(index: 0, isFinal: true),
 			associatedData: [], plaintext: [1, 2, 3])
-	}
-
-	@Test func writeOnceRewriteHardStopsEvenUnderWarn() throws {
-		// The write-once per-segment cap is not a soft budget: exceeding it reuses the
-		// segment's fixed nonce under GCM. `.warn` must not let it through.
-		let schedule = try makeSchedule(protocolID: ProtocolID.immutable, aeadID: 0x0002)
-		let encryptor = PayloadEncryptor(schedule: schedule, policy: .warn)
-		var events: [BudgetEvent] = []
-		encryptor.onBudgetEvent = { events.append($0) }
-		let pos = SegmentPosition(index: 0, isFinal: false)
-		_ = try encryptor.encryptDerived(position: pos, associatedData: [], plaintext: [1])
-		#expect(
-			throws: BudgetError.segmentRewriteBudgetExceeded(
-				index: 0, count: 2, limitLog2: 0)
-		) {
-			_ = try encryptor.encryptDerived(
-				position: pos, associatedData: [], plaintext: [1])
-		}
-		// The event still fired (both policies report), the counter did not advance,
-		// and a first write of a fresh index still succeeds.
-		#expect(events.contains { $0.kind == .segment })
-		#expect(encryptor.segmentRewriteCounts[0] == 1)
-		_ = try encryptor.encryptDerived(
-			position: SegmentPosition(index: 1, isFinal: true), associatedData: [],
-			plaintext: [2])
 	}
 
 	/// KAT pinning the SEAL-RO-v1 schedule bytes (CEK 32×0xAA, salt 32×0x04,
