@@ -21,7 +21,11 @@ import RAAE
 /// > unstable and the implementation is unaudited — not for production use.
 public enum SEALProfile: Equatable, Sendable {
 	/// `SEAL-RO-v1` — the immutable write-once profile (§4.10.2): derived nonce mode,
-	/// every segment encrypted exactly once.
+	/// every segment encrypted exactly once. Provides per-segment integrity and the
+	/// finality-bit truncation signal only — no snapshot runs, so whole-object
+	/// integrity (including detecting truncation to *empty*, which is otherwise
+	/// indistinguishable from a legitimately empty object) needs `SEAL-RW-v1` or a
+	/// layer above SEAL.
 	case readOnly
 	/// `SEAL-RW-v1` — the mutable profile (§4.10.2): segments may be rewritten in
 	/// place under the snapshot authenticator.

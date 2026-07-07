@@ -97,6 +97,13 @@ public struct SEALReader {
 	/// (§4.10.2), and each claim is confirmed cryptographically when its segment is
 	/// decrypted — whole-object completeness therefore requires decrypting the final
 	/// segment.
+	///
+	/// - Important: an **empty** set passes — the spec permits empty objects
+	///   (§4.11.1) — so truncation-to-empty is undetectable under `SEAL-RO-v1`: with
+	///   no snapshot and no segments, nothing distinguishes a legitimately empty
+	///   object from one whose segments were all deleted. Only the host knows
+	///   whether content is expected. Under `SEAL-RW-v1` the snapshot binds the
+	///   segment count, so ``verifySnapshot(_:segments:)`` catches it.
 	public func verifyFinality(positions: [SegmentPosition]) throws {
 		guard !positions.isEmpty else { return }
 		var seen = Set<UInt64>()

@@ -146,6 +146,30 @@ struct SEALRoundTripTests {
 		try reader.verifySnapshot(object.snapshot!, segments: [])
 	}
 
+	@Test func truncationToEmptyIsUndetectableUnderReadOnlyOnly() throws {
+		// §4.11.1 permits empty objects, so an empty presented set passes the
+		// finality check — under RO (no snapshot) a total truncation is therefore
+		// invisible to the engine, and only the host can know content was expected.
+		let ro = try SEALConfiguration(profile: .readOnly, aeadID: 0x0002, kdfID: 0x0001)
+		let roCEK = SEALConfiguration.generateCEK()
+		let roWriter = try ro.startEncryption(cek: roCEK)
+		_ = try roWriter.encrypt([1], at: SegmentPosition(index: 0, isFinal: true))
+		let roObject = try roWriter.finalize()
+		let roReader = try ro.startDecryption(cek: roCEK, header: roObject.header)
+		try roReader.verifyFinality(positions: [])  // passes: engine cannot know
+
+		// Under RW the snapshot binds n_seg: the same total truncation is caught.
+		let rw = try SEALConfiguration(profile: .readWrite, aeadID: 0x0002, kdfID: 0x0001)
+		let rwCEK = SEALConfiguration.generateCEK()
+		let rwWriter = try rw.startEncryption(cek: rwCEK)
+		_ = try rwWriter.encrypt([1], at: SegmentPosition(index: 0, isFinal: true))
+		let rwObject = try rwWriter.finalize()
+		let rwReader = try rw.startDecryption(cek: rwCEK, header: rwObject.header)
+		#expect(throws: SEALError.snapshotMismatch) {
+			try rwReader.verifySnapshot(rwObject.snapshot!, segments: [])
+		}
+	}
+
 	@Test func writerEnforcesDiscipline() throws {
 		let config = try SEALConfiguration(
 			profile: .readOnly, aeadID: 0x0002, kdfID: 0x0001)
