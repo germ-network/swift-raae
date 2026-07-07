@@ -49,9 +49,6 @@ public struct SEALReader {
 	public func decrypt(
 		_ segment: SealedSegment, associatedData: [UInt8] = []
 	) throws -> [UInt8] {
-		guard segment.position.index < SEALLimits.maxSegments else {
-			throw SEALError.segmentIndexExceedsCap(segment.position.index)
-		}
 		switch configuration.nonceMode {
 		case .random:
 			guard let nonce = segment.nonce else {

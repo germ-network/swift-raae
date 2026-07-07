@@ -87,9 +87,6 @@ public final class SEALWriter {
 		associatedData: [UInt8] = []
 	) throws -> SealedSegment {
 		guard !finalized else { throw SEALError.alreadyFinalized }
-		guard position.index < SEALLimits.maxSegments else {
-			throw SEALError.segmentIndexExceedsCap(position.index)
-		}
 		guard !written.contains(position.index) else {
 			throw SEALError.duplicateSegmentIndex(position.index)
 		}

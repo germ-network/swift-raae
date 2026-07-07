@@ -142,6 +142,9 @@ XORed into the **low 8 octets** of the `Nn`-octet `nonce_base` (requires `Nn ≥
 `(i<<1)|is_final` must fit 64 bits, so derived mode rejects `i ≥ 2^63` (a larger index
 would silently drop its top bit and alias the nonce of `i − 2^63` — never under the same
 epoch key for `r ≤ 63`, but the injectivity assumption should not rest on that).
+This is the **only** index bound we enforce, in the core, per the spec; random mode is
+architecturally unbounded. Noted, not adopted: some other implementations cap indices
+at `2^48` as a cross-implementation convention — see `SEAL-ENGINE-PLAN.md` §2.4.
 
 ## payload_info wire layout (§4 / Table refs)
 

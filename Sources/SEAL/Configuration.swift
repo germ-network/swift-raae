@@ -6,9 +6,6 @@ import RAAE
 public enum SEALError: Error, Equatable {
 	/// Writer used after ``SEALWriter/finalize()``.
 	case alreadyFinalized
-	/// Segment index at or beyond ``SEALLimits/maxSegments`` (the engine cap; the
-	/// spec's own derived-mode bound is enforced by the core).
-	case segmentIndexExceedsCap(UInt64)
 	/// The index was already written. The engine writes each index exactly once —
 	/// under `SEAL-RO-v1` that is the normative write-once rule; under `SEAL-RW-v1`
 	/// in-place rewrite arrives with the Stage-C rewriter, which also rebinds the

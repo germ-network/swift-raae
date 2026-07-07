@@ -161,11 +161,13 @@ struct SEALRoundTripTests {
 		#expect(throws: SEALError.duplicateFinalSegment(existing: 2, new: 3)) {
 			_ = try writer.encrypt([4], at: SegmentPosition(index: 3, isFinal: true))
 		}
-		// The engine index cap.
-		#expect(throws: SEALError.segmentIndexExceedsCap(SEALLimits.maxSegments)) {
+		// The engine enforces exactly the spec's index bounds: the core's §4.5.3.2
+		// derived-mode MUST (index < 2^63) propagates; there is no engine-level cap.
+		#expect(
+			throws: Segment.SegmentError.indexTooLargeForDerivedMode(UInt64(1) << 63)
+		) {
 			_ = try writer.encrypt(
-				[5],
-				at: SegmentPosition(index: SEALLimits.maxSegments, isFinal: false))
+				[5], at: SegmentPosition(index: UInt64(1) << 63, isFinal: false))
 		}
 		// finalize() rejects a final segment that is not the highest index.
 		_ = try writer.encrypt([6], at: SegmentPosition(index: 5, isFinal: false))

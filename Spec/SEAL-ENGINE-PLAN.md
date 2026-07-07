@@ -151,20 +151,24 @@ own containers. So:
   top — stage D, optional. Aligned layouts and armoring: out of scope until a
   consumer needs them.
 
-### 2.4 Engine-level caps
+### 2.4 Index bounds — spec-exact, no engine cap
 
-- `maxSegments = 2^48` at the SEAL layer, applied in both nonce modes — a
-  deliberately-stricter engine cap chosen for cross-implementation accept/reject
-  symmetry, 32-bit overflow safety, and headroom against future wire changes. The
-  core keeps the spec's exact §4.5.3.2 bound (index < 2^63, derived mode) so it
-  remains spec-conformant standalone. Engine = ecosystem contract, core = spec.
+The engine enforces exactly the spec's bounds: the §4.5.3.2 derived-mode MUST
+(`index < 2^63`) lives in the core and propagates through every engine path; random
+mode has no architectural index limit. **Noted, not adopted:** some other
+implementations cap segment indices at `2^48` as a cross-implementation convention
+(overflow headroom, shared accept/reject sets). An earlier revision of this engine
+enforced that cap, unevenly — writer/reader checked it, the snapshot-verify and
+rewrite paths did not — which is exactly the asymmetry the cap is meant to prevent.
+It was dropped in favor of spec-exact behavior; revisit only if ecosystem interop
+demands the shared cap, and then apply it on *every* index-accepting path at once.
 
 ## 3. Structural-guarantee map (review finding → construction)
 
 | Finding (0.0.1 fix) | Core (stays, defense-in-depth) | SEAL engine (structural) |
 |---|---|---|
 | F1 segment_max | typed-error guards | writer validates; container chunks |
-| F2 index bound | reject ≥ 2^63 (spec MUST) | reject ≥ 2^48 (engine cap) |
+| F2 index bound | reject ≥ 2^63 (spec MUST) | spec bound only, via core (no engine cap; §2.4) |
 | F3 snap_id | registry + Table-13 tuple rejection (core) | `snap_id` not a parameter at all |
 | F4 write-once | gate + hard metering | RO writer has no rewrite op; rewriter unconstructible for RO |
 | F5 nonce param | metered path owns nonce | no nonce params exist; hedged gen later |
