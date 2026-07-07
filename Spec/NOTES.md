@@ -252,7 +252,9 @@ vector's fixed nonce to pin the ciphertext in both directions.
   continues the §5.9 budgets from the persisted `SEALUsageState` (hard caps,
   including the §5.9.7.4 hot-rewrite pool). Only constructible for `SEAL-RW-v1`.
   Pinned byte-exact against the E.17.1 deterministic rewrite (GCM-SIV). `n_seg`
-  never changes; extend/truncate are future work.
+  never changes; extend/truncate are future work. There is **no mid-authoring
+  resume** (the salt is writer-internal; an interrupted authoring pass restarts
+  under a fresh salt) — `resumeWriting` serves finalized objects only.
 - **CEK length is fixed at 32 octets** and validated in `PayloadSchedule.init`.
 - **Profile tuples (Table 13) are enforced in `PayloadSchedule.init`**: SEAL-RW-v1
   requires `snap_id 0x0001`; SEAL-RO-v1 requires derived nonce + `snap_id 0x0000`

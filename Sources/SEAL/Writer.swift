@@ -39,8 +39,15 @@ extension SEALConfiguration {
 /// internal snapshot accounting (the raw accumulator never leaves the writer).
 ///
 /// A mutable reference type and **not** `Sendable`; serialize external access.
-/// Accounting is per-instance and in-memory — authoring an object across processes
-/// (freeze/resume) arrives with the Stage-C rewriter.
+/// Accounting is per-instance and in-memory, and holds one entry per written index
+/// (`O(n_seg)`).
+///
+/// - Important: there is **no mid-authoring resume**. The salt is writer-internal,
+///   so an interrupted authoring session cannot be continued — a fresh writer
+///   derives a fresh schedule and the interrupted pass's segments are unusable
+///   (crypto-safe; the work is lost). Author in one session. Rewriting a *finalized*
+///   `SEAL-RW-v1` object across processes is
+///   ``SEALConfiguration/resumeWriting(cek:header:snapshot:segments:usageState:globalAssociatedData:)``.
 public final class SEALWriter {
 	public let configuration: SEALConfiguration
 	/// Available immediately: salt and commitment are fixed at `StartEnc`.

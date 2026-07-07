@@ -25,6 +25,9 @@ unrepresentable at this layer:
 
 BREAKING (pre-release 0.0.x): `PayloadEncryptor`, `BudgetPolicy`, `BudgetEvent`, and
 `BudgetError` are removed from the RAAE core — the writer absorbed the metering, with
-hard caps only (no warn mode) and no counter seeding (authoring freeze/resume returns
-with the Stage-C rewriter). `UsageBudget`/`usageBudget()` remain as the informational
-§5.9 surface. README/DocC now lead with the SEAL product.
+hard caps only (no warn mode) and no counter seeding. Counter persistence for
+*rewriting finalized objects* ships with the Stage-C rewriter (`SEALUsageState`);
+there is deliberately **no mid-authoring resume** — the salt is writer-internal, so
+an interrupted authoring session restarts under a fresh salt and its partial output
+is unusable (crypto-safe, work lost). `UsageBudget`/`usageBudget()` remain as the
+informational §5.9 surface. README/DocC now lead with the SEAL product.
