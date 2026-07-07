@@ -193,8 +193,9 @@ demands the shared cap, and then apply it on *every* index-accepting path at onc
 - **Stage C — RW rewrite + named instantiations.** `resumeWriting`/`rewrite` with
   internal unmasking (pin against E.16.1 rewrite vector); `SEALScheme` from the
   vendored §4.12 table.
-- **Stage D — conveniences (optional).** Linear-layout `SEALContainer`; hedged
-  nonces (Appendix D); AsyncSequence streaming if a consumer needs it.
+- **Stage D — conveniences and hardening (optional; see §6).** Hedged randomness
+  (Appendix B), plaintext-bound nonces (Appendix A), linear-layout container,
+  extend/truncate, digest-based verify overloads, polish.
 
 ## 5. Prerequisite and open spec checks
 
@@ -213,5 +214,42 @@ Table 13/15 transcriptions in `NOTES.md` and the `G` drift note in `SOURCE.md`):
 - §4.6 `G`: discovered via snapshot-vs-vector diffing, now implemented in the core
   (commitment binds `[...payload_info, G]`; E.2 pinned).
 
-**Still open**: Appendix D hedged-nonce normativity (MUST/SHOULD/MAY) — determines
-whether Stage-D hedging is optional or required for random mode.
+**Resolved (was: "Appendix D hedged-nonce normativity")**: in the vendored snapshot
+the constructions live in **Appendix A** (Optional Plaintext-Bound Nonce — explicitly
+informative: "Implementations MAY use this construction in place of a fresh CSPRNG
+call … under nonce_mode 'random'"; encryptor-only, wire-indistinguishable from random
+mode; E.19 component vectors) and **Appendix B** (Optional Hedged Randomness — a
+*conditional* SHOULD: "When a long-term symmetric key sk of at least Nh octets is
+available to the encryptor, implementations SHOULD mix it into random generation"
+per RFC 8937). The engine's API takes no long-term sender key today, so the SHOULD's
+condition is unmet and the plain-CSPRNG path is conformant; offering a sender key is
+what activates it (§6). Nothing in Stage D is required work.
+
+## 6. Stage D scope (all optional)
+
+- **D1 — Hedged randomness (Appendix B; conditional SHOULD).** Add an optional
+  `senderKey` to `startEncryption`; when supplied, derive
+  `hedge_key = KDF(protocol_id, "hedge", sk, [], Nh)` and draw the salt and
+  random-mode nonces through `HedgedRandom` (RFC 8937 pattern). Supplying the key is
+  what triggers the spec's SHOULD; hedging defends weak-CSPRNG output but not
+  duplicated CSPRNG state (that is D2's job).
+- **D2 — Plaintext-bound nonces (Appendix A; MAY).** Encryptor-only replacement for
+  the fresh-CSPRNG draw in random mode (`pt_hash`/`pt-nonce` labels, Table 24),
+  defending RNG state duplication (VM snapshots, fork). Wire format unchanged;
+  decryption unaffected. Pin against the E.19 component vectors.
+- **D3 — Linear-layout container (§4.11.1, reduced immutable form §4.11.4).** A
+  single-`Data` seal/open convenience over the engine values. Prerequisite for
+  claiming any §4.12 named instantiation, since each row binds a layout; until then
+  `SEALScheme` remains a parameter preset.
+- **D4 — Extend/truncate (Table 13 RW mutability).** The rewriter covers rewrite
+  only; extend appends indices (n_seg grows, snapshot rebinds, finality moves) and
+  truncate removes a tail. Both need the finality-shape rules re-derived from the
+  spec's extend/truncate text before design.
+- **D5 — Digest-based verify/resume overloads.** `verifySnapshot`/`resumeWriting`
+  accepting `(position, tag)` pairs instead of full `SealedSegment`s, so verifying a
+  large object does not require its ciphertext in memory.
+- **D6 — Polish.** Split `SEALError.incompleteSegmentSet` into distinct cases;
+  expose `SEALScheme` row parameters publicly; add a rewriter wrong-`G` test;
+  deduplicate the internal `xor`/budget helpers against the core; adopt
+  swift-docc-plugin (or exclude the catalogs) to silence the two benign
+  unhandled-`.docc` build warnings.
