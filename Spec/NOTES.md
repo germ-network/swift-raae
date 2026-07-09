@@ -123,7 +123,7 @@ All keys derive from `CEK` (ikm) with `payload_info` as the KDF `info` list. The
 epoch_length(u8), salt(32)]`.
 
 ```
-commitment  = KDF(protocol_id, "commit",      [CEK], payload_info, commit_len)  ; default Nh, min 16
+commitment  = KDF(protocol_id, "commit",      [CEK], [...payload_info, G], commit_len)  ; default Nh, min 16
 payload_key = KDF(protocol_id, "payload_key", [CEK], payload_info, Nk)
 snap_key    = KDF(protocol_id, "acc_key",     [CEK], payload_info, Nh)
 nonce_base  = KDF(protocol_id, "nonce_base",  [CEK], payload_info, Nn)           ; derived mode only
@@ -131,6 +131,28 @@ nonce_base  = KDF(protocol_id, "nonce_base",  [CEK], payload_info, Nn)          
 
 The draft prints a full KDF trace for the commitment; our Stage-1 KDF reproduces
 `prk` and `commitment` exactly, confirming framing + Extract/Expand are correct.
+
+### Global associated data G (§4.2.4, §4.5.1, §4.6)
+
+`G` is the `StartEnc`/`StartDec` global associated data: whole-message application
+context (for MLS attachments, the `object_id`). It binds into the **commitment
+only**, framed as the last element of the commit `info` — `payload_key` /
+`acc_key` / `nonce_base` never take it. `G` is never stored; the decryptor
+re-supplies it, and a wrong or missing value fails as `commitmentMismatch`, exactly
+like a wrong CEK.
+
+> ⚠️ **Empty-G convention divergence.** The published `draft-…-raae-01`
+> (2026-07-06) frames the empty default as *one zero-length element in every
+> commitment* ("always the last element … one zero-length element, so every
+> commitment derivation includes it") and regenerated the vector corpus — its E.1
+> commitment is `47ea0ec7…`. The vendored corpus predates that regeneration (E.1
+> commitment `020e115b…`, no G element at all). We **omit an empty G** so the
+> vendored corpus keeps passing; the two conventions are byte-identical for every
+> **non-empty** G (the framed lists coincide), which `GlobalAADTests` pins against
+> the -01 Appendix E.2 value (`G="raae-demo-g"` → commitment `d8eedb1f…`).
+> Attachments always have a non-empty G (`object_id` must be non-empty), so interop
+> is unaffected there. On the next vector resync, switch to always-include and
+> update the vendored commitment values.
 
 ### Segment key via epoch key (§4.5.2)
 
@@ -180,6 +202,44 @@ Every block: `protocol_id="SEAL-RW-v1"`, `CEK = 32×0xAA`, `salt = 32×0x04`. Ve
 print ciphertext+tag but not plaintext; tests recover `P_i` by decrypting (the AEAD tag
 guarantees `segment_key`/`nonce`/`aad` are all correct), then re-encrypt under the
 vector's fixed nonce to pin the ciphertext in both directions.
+
+## SEAL-attachment named instantiation (§4.12, raae-01) — MLS attachments
+
+`SEAL-attachment(aead_id, kdf_id)` per `draft-sullivan-cfrg-raae-01` Table 15, the
+scheme `draft-sullivan-mls-attachments` (2026-07-06, referencing raae-01) consumes:
+
+- Profile `SEAL-RO-v1`, `segment_max` 65536, `nonce_mode` derived,
+  `epoch_length` 32, `snap_id` **0x0000** (no snapshot authenticator),
+  `commitment_length = Nh`, fresh 32-octet salt per object. Any AEAD is admitted
+  (write-once licenses derived + non-MRAE via §4.5.3.2's discipline).
+- Linear layout, reduced immutable form (§4.11.4): no stored nonces, no snapshot.
+
+  ```
+  object    = salt(32) || commitment(Nh) || segment(0) || ... || segment(n-1)
+  segment   = ciphertext || tag(16)
+  offset(i) = (32 + Nh) + i * (65536 + 16)
+  ```
+
+  Every non-final segment is exactly 65536 plaintext octets; only the final may be
+  shorter; a valid object has ≥ 1 segment.
+- MLS binding (`draft-sullivan-mls-attachments`): `aead_id`/`kdf_id` are the IANA
+  (RFC 5116 / RFC 9180) code points of the group's MLS cipher suite; `G =
+  object_id` (raw octets, non-empty, ≤ 255 — a receiver MUST reject empty);
+  per-segment `A_i` is empty on both `EncSeg`/`DecSeg`; the 32-octet CEK is derived
+  MLS-side (`SafeExportSecret(ComponentID)` → `ExpandWithLabel(..., "attachment",
+  object_id, 32)`). Whole-object integrity = open every segment (index `n-1` as
+  final) against the *authenticated* length in the object reference.
+
+> ⚠️ **Post-01 naming drift.** The `-latest` draft renames this instantiation
+> `SEAL-simple` and rebinds the name `SEAL-attachment` to a new write-once
+> instantiation on a "digest transcript" authenticator (`snap_id 0x0002`, not
+> implemented here). We implement the **-01 semantics**, which is what the
+> attachments draft references; re-check the name/`snap_id` on the next resync.
+
+`SEALAttachment` packages all of the above (suite mapping, layout, metered
+write-once `Writer`, commitment-verified `Reader`, one-shot encrypt/decrypt);
+`SEALAttachmentTests.attachmentScheduleKAT` pins the schedule against an
+independent implementation.
 
 ## Implementation safety rails (beyond the spec text)
 

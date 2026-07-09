@@ -14,6 +14,22 @@ import Foundation
 public struct PayloadSchedule {
 	public let protocolID: [UInt8]
 	public let payloadInfo: PayloadInfo
+	/// Global associated data `G` (§4.2.4), bound into the ``commitment`` and nothing
+	/// else — the other three derivations never take it (§4.5.1). It carries
+	/// whole-message application context (for MLS attachments, the `object_id`) that is
+	/// never stored with the object (§4.6): a decryptor re-supplies it, and a wrong or
+	/// missing `G` fails ``verifyCommitment(_:)`` exactly like a wrong CEK. `G` is
+	/// framed like any KDF field, so any length is accepted (over-large values hash
+	/// through `LH`).
+	///
+	/// - Note: an **empty** `G` is omitted from the commitment info rather than framed
+	///   as a zero-length element, keeping every schedule byte-compatible with the
+	///   vendored pre-G Appendix E corpus this package pins (`Spec/SOURCE.md`). The
+	///   published draft-01 instead frames the empty default explicitly, so its
+	///   regenerated commitment values differ **only when `G` is empty**; every
+	///   non-empty `G` derives byte-identically to draft-01 (pinned against its
+	///   Appendix E.2 in `GlobalAADTests`). See the convention note in `Spec/NOTES.md`.
+	public let globalAAD: [UInt8]
 	public let aead: AEAD
 	public let kdf: KeyDerivation
 
@@ -89,10 +105,14 @@ public struct PayloadSchedule {
 	/// Derive the schedule from a 32-octet CEK and the message's `payload_info`.
 	///
 	/// - Important: this initializer does **not** verify a commitment. A decrypt-side caller
-	///   MUST obtain the schedule via ``startDecrypt(protocolID:cek:payloadInfo:publishedCommitment:expectedCommitmentLength:)``
+	///   MUST obtain the schedule via ``startDecrypt(protocolID:cek:payloadInfo:globalAAD:publishedCommitment:expectedCommitmentLength:)``
 	///   (or call ``verifyCommitment(_:)``) before decrypting any segment — the commitment is
 	///   SEAL's only key/parameter-committing defense (§4.6), and AES-GCM / ChaCha20-Poly1305
 	///   are not key-committing on their own.
+	/// - Parameter globalAAD: the global associated data `G` (§4.2.4), bound into the
+	///   commitment as an extra framed element after `payload_info` (§4.5.1) — see
+	///   ``globalAAD``. Defaults to empty, which derives the same commitment as the
+	///   pre-G schedule (the element is omitted; see the property's convention note).
 	/// - Parameter commitmentLength: defaults to the KDF's `Nh`; must be in
 	///   `[16, min(255·Nh, 0xFFFE)]`. Out-of-range values throw
 	///   ``ScheduleError/commitmentTooShort(_:)`` / ``ScheduleError/commitmentTooLong(_:)``.
@@ -103,6 +123,7 @@ public struct PayloadSchedule {
 		protocolID: [UInt8],
 		cek: [UInt8],
 		payloadInfo: PayloadInfo,
+		globalAAD: [UInt8] = [],
 		commitmentLength: Int? = nil
 	) throws {
 		try payloadInfo.validate()
@@ -143,14 +164,19 @@ public struct PayloadSchedule {
 
 		self.protocolID = protocolID
 		self.payloadInfo = payloadInfo
+		self.globalAAD = globalAAD
 		self.aead = aead
 		self.kdf = kdf
 
 		let info = payloadInfo.kdfInfoElements
+		// §4.5.1: G binds into the commitment only, as an extra framed element after
+		// payload_info — payload_key / acc_key / nonce_base never take it. An empty G
+		// is omitted, not framed (see the globalAAD convention note).
+		let commitInfo = globalAAD.isEmpty ? info : info + [globalAAD]
 		// commitment is a public authenticator (not secret) → derive(...) -> [UInt8].
 		self.commitment = kdf.derive(
 			protocolID: protocolID, label: Label.commit,
-			ikm: [cek], info: info, outputLength: commitLen)
+			ikm: [cek], info: commitInfo, outputLength: commitLen)
 		// Secret outputs → deriveKey(...) -> SymmetricKey (zeroizing).
 		self.payloadKey = kdf.deriveKey(
 			protocolID: protocolID, label: Label.payloadKey,
@@ -168,9 +194,10 @@ public struct PayloadSchedule {
 
 	/// Verify a published commitment against this schedule's, in constant time (§4.6).
 	///
-	/// A reader **MUST** call this (or obtain the schedule via ``startDecrypt(protocolID:cek:payloadInfo:publishedCommitment:expectedCommitmentLength:)``)
-	/// and abandon decryption on a throw — a mismatch means the wrong CEK or parameters and
-	/// MUST be treated as an authentication failure for the object.
+	/// A reader **MUST** call this (or obtain the schedule via ``startDecrypt(protocolID:cek:payloadInfo:globalAAD:publishedCommitment:expectedCommitmentLength:)``)
+	/// and abandon decryption on a throw — a mismatch means the wrong CEK, parameters, or
+	/// global associated data `G`, and MUST be treated as an authentication failure for
+	/// the object.
 	public func verifyCommitment(_ published: [UInt8]) throws {
 		guard published.count == commitment.count else {
 			throw CommitmentError.commitmentLengthMismatch(
@@ -182,8 +209,8 @@ public struct PayloadSchedule {
 	}
 
 	/// raAE `StartDec` (§3.2 / §4.1 Table 1): re-derive the schedule from `(CEK,
-	/// payload_info)` and verify the published commitment **before** any segment can be
-	/// decrypted. This is the recommended safe path — verification is enforced by
+	/// payload_info, G)` and verify the published commitment **before** any segment can
+	/// be decrypted. This is the recommended safe path — verification is enforced by
 	/// convention (a documented MUST), not by the type system, since the public `init` can
 	/// still build an unverified schedule. Returns the schedule only if the commitment
 	/// matches.
@@ -200,14 +227,17 @@ public struct PayloadSchedule {
 	/// `expectedCommitmentLength` to get a precise
 	/// ``CommitmentError/commitmentLengthMismatch(expected:got:)`` instead.
 	///
-	/// - Note: the message nonce `N` and global associated data `G` of the abstract
-	///   `StartDec` are not yet parameters — SEAL defines no `G`, and there is no header
-	///   format yet; §4.6 binds a profile's `G` as an extra framed element after
-	///   `payload_info` when one is defined.
+	/// - Note: `globalAAD` is the abstract `StartDec`'s global associated data `G`
+	///   (§3.2); the per-message nonce role is played by the salt inside `payload_info`.
+	///   `G` is never stored with the object (§4.6) — the caller supplies it from
+	///   application context (for MLS attachments, the `object_id`), and a wrong or
+	///   missing value fails as ``CommitmentError/commitmentMismatch``, exactly like a
+	///   wrong CEK.
 	public static func startDecrypt(
 		protocolID: [UInt8],
 		cek: [UInt8],
 		payloadInfo: PayloadInfo,
+		globalAAD: [UInt8] = [],
 		publishedCommitment: [UInt8],
 		expectedCommitmentLength: Int? = nil
 	) throws -> PayloadSchedule {
@@ -217,6 +247,7 @@ public struct PayloadSchedule {
 		}
 		let schedule = try PayloadSchedule(
 			protocolID: protocolID, cek: cek, payloadInfo: payloadInfo,
+			globalAAD: globalAAD,
 			commitmentLength: publishedCommitment.count)
 		try schedule.verifyCommitment(publishedCommitment)
 		return schedule

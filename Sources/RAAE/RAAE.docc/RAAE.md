@@ -43,6 +43,23 @@ let snapshot = hash.snapshotValue(
     segmentCount: 1, accumulator: hash.accumulator(segments: tags))
 ```
 
+For MLS attachment encryption (`draft-sullivan-mls-attachments`), skip the manual
+parameter selection: ``SEALAttachment`` packages the draft's
+`SEAL-attachment(aead_id, kdf_id)` named instantiation (§4.12) — write-once profile,
+derived nonces, 64 KiB segments, a `salt || commitment` header, and the attachment's
+`object_id` bound as the global associated data `G`:
+
+```swift
+let suite = SEALAttachment.Suite(mlsCipherSuite: 0x0001)!
+let object = try SEALAttachment.encrypt(
+    cek: cek,             // 32 octets, derived per object_id on the MLS side
+    objectID: objectID,   // the attachment's object_id (bound as G)
+    suite: suite,
+    plaintext: fileBytes)
+let back = try SEALAttachment.decrypt(
+    cek: cek, objectID: objectID, suite: suite, object: object)
+```
+
 > Warning: Pre-release, tracking an early individual Internet-Draft. The API is
 > unstable and the implementation is unaudited — not for production use.
 
@@ -56,7 +73,7 @@ the host storing the object:
   become mutually substitutable, with valid commitments and snapshots. Generate a
   fresh random 32-octet salt (or a fresh CEK) for every object.
 - **Verify before decrypting.** Obtain decrypt-side schedules via
-  ``PayloadSchedule/startDecrypt(protocolID:cek:payloadInfo:publishedCommitment:expectedCommitmentLength:)``
+  ``PayloadSchedule/startDecrypt(protocolID:cek:payloadInfo:globalAAD:publishedCommitment:expectedCommitmentLength:)``
   (§4.6) and verify the snapshot before trusting the segment set (§4.9.1.2).
 - **Snapshot freshness.** A complete old `(segments, snapshot)` pair verifies — the
   snapshot proves set integrity, not recency. Rollback protection requires the host
@@ -71,6 +88,12 @@ the host storing the object:
 
 ## Topics
 
+### MLS attachments
+
+- ``SEALAttachment``
+- ``SEALAttachment/Suite``
+- ``SEALAttachment/Layout``
+
 ### Message parameters and key schedule
 
 - ``PayloadInfo``
@@ -84,7 +107,7 @@ the host storing the object:
 
 ### Safe decryption
 
-- ``PayloadSchedule/startDecrypt(protocolID:cek:payloadInfo:publishedCommitment:expectedCommitmentLength:)``
+- ``PayloadSchedule/startDecrypt(protocolID:cek:payloadInfo:globalAAD:publishedCommitment:expectedCommitmentLength:)``
 - ``PayloadSchedule/verifyCommitment(_:)``
 
 ### Usage limits

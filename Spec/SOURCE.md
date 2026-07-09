@@ -27,6 +27,17 @@ renumbering the ones we vendor:
 
 Vector files, test names, and docs now use the 2026-07-06 numbering.
 
+> ⚠️ **Known drift vs the published `-01`** (also dated 2026-07-06, at
+> <https://www.ietf.org/archive/id/draft-sullivan-cfrg-raae-01.html>): `-01` frames
+> an *empty* global associated data `G` as a zero-length element in **every**
+> commitment derivation and regenerated the corpus's commitment values (its E.1
+> commitment is `47ea0ec7…`; ours is the pre-G `020e115b…`). All other schedule
+> values and ciphertexts are unaffected (`G` binds into the commitment only), and
+> every **non-empty** `G` derives byte-identically under both conventions — pinned
+> against `-01` Appendix E.2 in `GlobalAADTests`. See the convention note in
+> `NOTES.md`; a full resync should adopt the always-include convention and update
+> the vendored `commitment_hex` values.
+
 ## Why a vendored snapshot?
 
 The draft is served from a living `-latest` URL with no frozen revision and is only
