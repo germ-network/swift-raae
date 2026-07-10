@@ -12,9 +12,10 @@ Authenticated Encryption".
 ## 2026-07-06 refresh
 
 The vendored vector *values* are unchanged from the 2026-06-26 snapshot (every hex
-value was re-verified against the new snapshot's Appendix E), but the draft inserted
-new vector groups (E.2 global-AAD, E.3 KDF-combiner, per-suite 65536 variants, ...),
-renumbering the ones we vendor:
+value was re-verified against the new snapshot's Appendix E — **except** the five
+`commitment_hex` fields, later resynced to the published `-01` values; see the resync
+note below), but the draft inserted new vector groups (E.2 global-AAD, E.3
+KDF-combiner, per-suite 65536 variants, ...), renumbering the ones we vendor:
 
 | 2026-06-26 | 2026-07-06 | vector |
 |------------|------------|--------|
@@ -27,16 +28,18 @@ renumbering the ones we vendor:
 
 Vector files, test names, and docs now use the 2026-07-06 numbering.
 
-> ⚠️ **Known drift vs the published `-01`** (also dated 2026-07-06, at
+> **Resynced to the published `-01`** (also dated 2026-07-06, at
 > <https://www.ietf.org/archive/id/draft-sullivan-cfrg-raae-01.html>): `-01` frames
 > an *empty* global associated data `G` as a zero-length element in **every**
-> commitment derivation and regenerated the corpus's commitment values (its E.1
-> commitment is `47ea0ec7…`; ours is the pre-G `020e115b…`). All other schedule
-> values and ciphertexts are unaffected (`G` binds into the commitment only), and
-> every **non-empty** `G` derives byte-identically under both conventions — pinned
-> against `-01` Appendix E.2 in `GlobalAADTests`. See the convention note in
-> `NOTES.md`; a full resync should adopt the always-include convention and update
-> the vendored `commitment_hex` values.
+> commitment derivation, which regenerated the corpus's commitment values (E.1 is now
+> `47ea0ec7…`, was the pre-G `020e115b…`). The vendored `commitment_hex` values
+> (E.1/E.5/E.9/E.16.1/E.17.1) now carry the -01 values. All other schedule values and
+> ciphertexts are unchanged (`G` binds into the commitment only), and every
+> **non-empty** `G` was already byte-identical — pinned against `-01` Appendix E.2 in
+> `GlobalAADTests`. See the convention note in `NOTES.md`. The commitment is a stored,
+> wire-visible value, so the `germ-network/mls-rs` companion must switch conventions
+> in lockstep for empty-G objects (SEAL-attachment objects carry a non-empty
+> `object_id` and interoperate across both conventions).
 
 ## Why a vendored snapshot?
 
