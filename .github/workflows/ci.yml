@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Test platform ${{ matrix.destination }}
-        run: set -o pipefail && xcodebuild -skipMacroValidation -scheme swift-raae -destination "${{ matrix.destination }}" test | xcbeautify
+        run: set -o pipefail && xcodebuild -skipMacroValidation -scheme swift-raae-Package -destination "${{ matrix.destination }}" test | xcbeautify
 
   linux:
     name: Test Linux
