@@ -39,6 +39,24 @@ On any spec refresh: re-capture the HTML, re-extract Appendix E vectors into
 The Appendix E test vectors are the conformance oracle for every stage. They are
 extracted (once, from this snapshot) into `Tests/RAAETests/Vectors/*.json`.
 
-> TODO (Stage 1): download the HTML snapshot into `Spec/draft-2026-07-06.html` and
-> extract Appendix E vectors to JSON. Left out of the initial commit to avoid
-> vendoring a large HTML blob before the extraction tooling exists.
+The HTML snapshot is vendored at `Spec/draft-2026-07-06.html` (captured 2026-07-06,
+552 KB). Normative transcriptions in `NOTES.md` (KDF layer, profiles Table 13, named
+instantiations Table 15) are made against this snapshot, never against the living
+`-latest` URL.
+
+### Intra-day drift: the §4.6 `G` element
+
+The `-latest` draft changed *between* the PR #13 vector extraction and the snapshot
+capture (same calendar date): §4.6 now binds the global associated data `G` as one
+framed element appended after `payload_info` in the **commitment** derivation
+(`[...payload_info, G]`, empty `G` still framed), and Appendix E gained the E.2
+G-binding vector group. Consequences, verified value-by-value against the snapshot:
+
+- Every vendored vector's `commitment_hex` changed and was re-pinned from the
+  snapshot (E.1/E.9, E.5, E.16.1, E.17.1) — each also re-derived byte-exact with an
+  independent from-scratch implementation of the labeled KDF.
+- **Every other vendored value is unchanged** (all 89 non-commitment hex values were
+  located verbatim in the snapshot): `payload_key`, `acc_key`, `nonce_base`, segment
+  keys, nonces, ciphertexts, tags, and snapshots do not bind `G`.
+- E.2 (`G` empty ⇒ the E.1 commitment; `G = "raae-demo-g"`) is pinned in
+  `GlobalAADCommitmentTests`.

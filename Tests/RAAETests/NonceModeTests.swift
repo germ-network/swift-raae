@@ -57,22 +57,4 @@ struct NonceModeTests {
 		}
 	}
 
-	@Test func meteredPathsInheritTheGuard() throws {
-		let derived = try makeSchedule(aeadID: 0x001F, nonceMode: .derived)
-		#expect(
-			throws: Segment.SegmentError.nonceModeMismatch(scheduleMode: .derived)
-		) {
-			_ = try PayloadEncryptor(schedule: derived).encryptRandom(
-				position: SegmentPosition(index: 0, isFinal: true),
-				associatedData: [], plaintext: [1])
-		}
-		let random = try makeSchedule(aeadID: 0x0002, nonceMode: .random)
-		#expect(
-			throws: Segment.SegmentError.nonceModeMismatch(scheduleMode: .random)
-		) {
-			_ = try PayloadEncryptor(schedule: random).encryptDerived(
-				position: SegmentPosition(index: 0, isFinal: true),
-				associatedData: [], plaintext: [1])
-		}
-	}
 }

@@ -97,6 +97,44 @@ other field (no separate extra prefix).
 > at `0x0002`. The E.5 ChaCha vector (E.3 in the 2026-06-26 snapshot) caught both.
 > Always take ids from this table.
 
+## Profiles (§4.10.2, Table 13) — transcribed from the vendored snapshot
+
+| protocol_id  | nonce_mode        | snap_id  | mutability              |
+|--------------|-------------------|----------|-------------------------|
+| `SEAL-RW-v1` | random or derived | `0x0001` | rewrite/extend/truncate |
+| `SEAL-RO-v1` | derived           | `0x0000` | write-once              |
+
+- "An encryptor MUST set payload_info to a (nonce_mode, snap_id) tuple that is valid
+  for its protocol_id, and a decryptor MUST reject any object whose tuple is not."
+- RW **requires** the masked multiset hash (`0x0001`); derived nonce under RW requires
+  an MRAE AEAD. RO **pins** derived nonce + `snap_id 0x0000` (no snapshot runs; the
+  finality bit is the only truncation signal, §4.9.1.2) and admits any AEAD because
+  write-once keeps each derived nonce unique. Write-once is normative: "an encryptor
+  MUST NOT rewrite a segment once it has been written."
+- Unknown protocol IDs: the spec defines tuples only for these two; custom profiles
+  carry their own rules (we stay strict: MRAE required for derived).
+
+## Named instantiations (§4.12, Table 15)
+
+Each row fixes profile/segment_max/nonce_mode/epoch/layout; the cipher suite
+(aead_id, kdf_id) stays caller-chosen, e.g. `SEAL-simple(aead_id, kdf_id)`.
+snap_id follows the profile; `commitment_length = Nh`; fresh 32-octet salt per object.
+
+| Name            | Profile    | segment_max | nonce_mode | epoch | layout  |
+|-----------------|------------|-------------|------------|-------|---------|
+| SEAL-attachment | SEAL-RO-v1 | 65536       | derived    | 32    | linear  |
+| SEAL-simple     | SEAL-RW-v1 | 65536       | random     | 16    | linear  |
+| SEAL-memory     | SEAL-RW-v1 | 16384       | random     | 16    | aligned |
+| SEAL-disk       | SEAL-RW-v1 | 16384       | random     | 16    | split   |
+| SEAL-compact    | SEAL-RW-v1 | 16384       | derived    | 16    | aligned |
+
+- SEAL-compact (mutable + derived) requires an MRAE AEAD; the others admit any.
+- 256-bit-nonce suites (AEGIS) use epoch_length 63 regardless of the row; a
+  referencing protocol MAY override the epoch.
+- Serialization layouts (§4.11: linear, aligned, split) are **not mandated** by the
+  parameterized construction — each named instantiation binds one, and the consuming
+  protocol pins remaining byte-level details.
+
 ### Derived nonce (§4.5.3)
 
 `nonce(i) = nonce_base XOR ((i<<1)|is_final)`, where the value is encoded big-endian and
@@ -104,6 +142,9 @@ XORed into the **low 8 octets** of the `Nn`-octet `nonce_base` (requires `Nn ≥
 `(i<<1)|is_final` must fit 64 bits, so derived mode rejects `i ≥ 2^63` (a larger index
 would silently drop its top bit and alias the nonce of `i − 2^63` — never under the same
 epoch key for `r ≤ 63`, but the injectivity assumption should not rest on that).
+This is the **only** index bound we enforce, in the core, per the spec; random mode is
+architecturally unbounded. Noted, not adopted: some other implementations cap indices
+at `2^48` as a cross-implementation convention — see `SEAL-ENGINE-PLAN.md` §2.4.
 
 ## payload_info wire layout (§4 / Table refs)
 
@@ -123,11 +164,18 @@ All keys derive from `CEK` (ikm) with `payload_info` as the KDF `info` list. The
 epoch_length(u8), salt(32)]`.
 
 ```
-commitment  = KDF(protocol_id, "commit",      [CEK], payload_info, commit_len)  ; default Nh, min 16
+commitment  = KDF(protocol_id, "commit",      [CEK], [...payload_info, G], commit_len)  ; default Nh, min 16
 payload_key = KDF(protocol_id, "payload_key", [CEK], payload_info, Nk)
 snap_key    = KDF(protocol_id, "acc_key",     [CEK], payload_info, Nh)
 nonce_base  = KDF(protocol_id, "nonce_base",  [CEK], payload_info, Nn)           ; derived mode only
 ```
+
+**Global associated data `G` (§4.6, verified vs E.2):** the commitment — and only the
+commitment — binds `G` as one framed element appended after `payload_info`. `G`
+defaults to the empty octet string, which is still committed (an empty final frame,
+`0x0000`). It is never stored; the decryptor supplies it from application context, and
+a wrong `G` fails the commitment check like a wrong CEK. This element was added to the
+draft after the vectors were first extracted — see `SOURCE.md` on the intra-day drift.
 
 The draft prints a full KDF trace for the commitment; our Stage-1 KDF reproduces
 `prk` and `commitment` exactly, confirming framing + Extract/Expand are correct.
@@ -192,13 +240,26 @@ vector's fixed nonce to pin the ciphertext in both directions.
   (`ProtocolID.immutable`), the write-once profile, where §4.5.3.2 permits the pairing
   because each segment is encrypted exactly once. Unknown protocol IDs are treated as
   rewritable (strict). The write-once non-MRAE pairing is only encryptable through
-  `PayloadEncryptor` (per-segment budget = one encryption, per-epoch-key budget = the
-  epoch's `2^r` indices; the per-segment cap hard-stops under both `enforce` and
-  `warn`) — the unmetered `Segment.encryptDerived` static refuses it with
-  `writeOnceRequiresMeteredEncryptor`, since an unmetered rewrite would reuse the
-  segment's fixed nonce. Decryption is ungated. Cross-process/multi-writer discipline
-  (seeding counters via `persistableState`) remains the host's obligation.
+  the SEAL writer, which enforces write-each-index-once structurally — the unmetered
+  `Segment.encryptDerived` static refuses it with `writeOnceRequiresMeteredEncryptor`,
+  since an unmetered rewrite would reuse the segment's fixed nonce. Decryption is
+  ungated. Cross-process/multi-writer discipline remains the host's obligation.
+- **The SEAL rewriter (`resumeWriting` → `rewrite`, §4.9.2)** verifies the full read
+  path before anything can be rewritten (commitment, then SnapVerify + finality over
+  the presented set), recovers the accumulator by unmasking the verified snapshot
+  (`acc = wrapped_acc XOR mask(n_seg, tag)` — never exposed in either direction),
+  preserves the position including finality, rejects stale segment copies, and
+  continues the §5.9 budgets from the persisted `SEALUsageState` (hard caps,
+  including the §5.9.7.4 hot-rewrite pool). Only constructible for `SEAL-RW-v1`.
+  Pinned byte-exact against the E.17.1 deterministic rewrite (GCM-SIV). `n_seg`
+  never changes; extend/truncate are future work. There is **no mid-authoring
+  resume** (the salt is writer-internal; an interrupted authoring pass restarts
+  under a fresh salt) — `resumeWriting` serves finalized objects only.
 - **CEK length is fixed at 32 octets** and validated in `PayloadSchedule.init`.
+- **Profile tuples (Table 13) are enforced in `PayloadSchedule.init`**: SEAL-RW-v1
+  requires `snap_id 0x0001`; SEAL-RO-v1 requires derived nonce + `snap_id 0x0000`
+  (`invalidProfileTuple`). Unknown protocol IDs are tuple-unconstrained (custom
+  profiles carry their own rules) but keep the strict MRAE gate for derived mode.
 - **`nonce_mode` is enforced on every segment path.** `Segment.encrypt/decryptRandom`
   require a random-mode schedule and `encrypt/decryptDerived` a derived-mode one
   (`nonceModeMismatch`); the mode is committed into the key schedule, so mixing modes
@@ -227,12 +288,13 @@ vector's fixed nonce to pin the ciphertext in both directions.
   any register/stack copies are not scrubbable — we bound the *long-lived* secret to one
   zeroizing buffer, not zero copies.
 - **Usage budgets (§5.9)** are exposed via `PayloadSchedule.usageBudget(...)` (log2
-  bounds) and enforced opt-in by `PayloadEncryptor` (warn/enforce), which meters
-  per-epoch-key (and, derived, per-segment) encryptions and delegates to the byte-exact
-  `Segment` statics. The metered random-mode path generates its own nonce and returns
-  it — the §5.9.7.1 budget assumes uniformly random nonces, so the meter must own
-  generation; pinned nonces (vectors) go through the unmetered `Segment` static. The `maxEpochKeysLog2` ceiling (§5.9.6) is advisory and not metered.
-  Cross-process accounting (snapshot via `persistableState`, restore via `seed`) and the
+  bounds) and enforced with hard caps (no warn mode) by the SEAL writer, which owns
+  nonce generation — the §5.9.7.1 budget assumes uniformly random nonces — and
+  delegates to the byte-exact `Segment` statics. The pinned-nonce seam
+  (`Segment.encryptRandom(... nonce:)`, and the unmetered derived core) is
+  `package`-scoped: reachable by the byte-exact KATs and the SEAL engine target,
+  never by consumers (see `Spec/SEAL-ENGINE-PLAN.md`). The `maxEpochKeysLog2`
+  ceiling (§5.9.6) is advisory and not metered. Cross-process accounting and the
   decrypt-side forgery bound are the host's responsibility.
 - **Host obligations are documented on the DocC landing page** (and on the relevant
   symbols): unique `(CEK, salt)` per object (shared schedules make objects mutually

@@ -36,30 +36,32 @@ Platforms: macOS, iOS, and Linux (via swift-crypto).
 
 ## Usage
 
-This release exposes the verified low-level engine (an ergonomic whole-message facade
-is deferred):
+Two products ship from this package: **`SEAL`** — the high-level engine most
+consumers want — and **`RAAE`** — the granular byte-exact core it is built on, for
+implementers and vector tooling.
 
 ```swift
-import RAAE
+import SEAL
 
-let info = PayloadInfo(
+// One configuration per suite: nonce mode and snapshot follow the profile (§4.10.2).
+let config = try SEALConfiguration(
+    profile: .readWrite,
     aeadID: 0x0002,   // AES-256-GCM
-    segmentMax: 16384,
     kdfID: 0x0001,    // HKDF-SHA-256
-    snapID: 0x0001,   // masked multiset hash
-    nonceMode: .random,
-    epochLength: 1,
-    salt: salt)       // 32 random octets, unique per object
+    segmentMax: 16384)
 
-let schedule = try PayloadSchedule(
-    protocolID: ProtocolID.mutable, cek: cek, payloadInfo: info)
+// Author: the writer generates the salt and nonces, meters the §5.9 budgets,
+// and maintains the snapshot internally.
+let cek = SEALConfiguration.generateCEK()
+let writer = try config.startEncryption(cek: cek)
+let segment = try writer.encrypt(
+    plaintext, at: SegmentPosition(index: 0, isFinal: true))
+let object = try writer.finalize()   // header + snapshot to store with the segments
 
-// The metered encryptor generates the nonce, returns it for storage, and
-// tracks the §5.9 usage budget.
-let encryptor = PayloadEncryptor(schedule: schedule)
-let pos = SegmentPosition(index: 0, isFinal: true)
-let (nonce, ciphertext) = try encryptor.encryptRandom(
-    position: pos, associatedData: [], plaintext: plaintext)
+// Read: the only reader constructor verifies the commitment first (§4.6).
+let reader = try config.startDecryption(cek: cek, header: object.header)
+try reader.verifySnapshot(object.snapshot!, segments: [segment])
+let back = try reader.decrypt(segment)
 ```
 
 ## Building
@@ -80,6 +82,9 @@ swift test
 | 3 | Snapshot authenticator, rewrite/verify | ✅ |
 | 4 | AES-256-GCM-SIV (MRAE); AEGIS/TurboSHAKE deferred | ✅ |
 | 5 | Public engine API, DocC, property tests, 0.0.1 | ✅ |
+| SEAL A–B | Two-product split; SEAL configuration + writer/reader lifecycle | ✅ |
+| SEAL C | RW rewriter (RewriteSeg + snapshot rebind, E.17.1-pinned); §4.12 scheme presets | ✅ |
+| SEAL D | Serialization layouts, hedged nonces | planned |
 
 Suite coverage: **AEAD** AES-128/256-GCM, ChaCha20-Poly1305, AES-256-GCM-SIV; **KDF**
 HKDF-SHA-256/384/512. AEGIS and TurboSHAKE are documented future work
