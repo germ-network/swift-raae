@@ -48,23 +48,28 @@ public enum SEALError: Error, Equatable {
 	case segmentBudgetExceeded(index: UInt64, limitLog2: Int)
 }
 
-/// Parameter presets from the spec's named-instantiation table (§4.12, Table 15).
-/// Each row fixes the profile, `segment_max`, `nonce_mode`, and epoch length; the
-/// cipher suite `(aead_id, kdf_id)` stays caller-chosen, e.g.
-/// `SEAL-simple(aead_id, kdf_id)`.
+/// Parameter presets from the spec's named-instantiation table (§4.12; Table 16 in
+/// draft-sullivan-cfrg-raae-02). Each row fixes the profile, `segment_max`,
+/// `nonce_mode`, and epoch length; the cipher suite `(aead_id, kdf_id)` stays
+/// caller-chosen, e.g. `SEAL-simple(aead_id, kdf_id)`.
 ///
 /// > Important: every spec instantiation also **binds a serialization layout**
-/// > (§4.11: linear for attachment/simple, aligned for memory/compact, split for
+/// > (§4.11: linear for simple/editable, aligned for memory/compact, split for
 /// > disk), which this engine does not ship — these presets are the instantiations'
 /// > *parameter sets*. A host claiming a named instantiation on the wire must also
 /// > implement its bound layout.
+///
+/// > Note: draft-02 renamed the write-once instantiation `SEAL-attachment` →
+/// > `SEAL-simple` and the mutable 65536 one `SEAL-simple` → `SEAL-editable`, and
+/// > reassigned the name `SEAL-attachment` to a new epoch-digest-tree scheme this
+/// > engine does not implement. These cases use the draft-02 names.
 public enum SEALScheme: CaseIterable, Equatable, Sendable {
-	/// `SEAL-attachment`: write-once content read whole. `SEAL-RO-v1`, 65536,
-	/// derived nonce, epoch_length 32.
-	case attachment
-	/// `SEAL-simple`: the basic mutable object. `SEAL-RW-v1`, 65536, random nonce,
-	/// epoch_length 16.
+	/// `SEAL-simple`: write-once content read whole. `SEAL-RO-v1`, 65536,
+	/// derived nonce, epoch_length 32. (Named `SEAL-attachment` in draft-01.)
 	case simple
+	/// `SEAL-editable`: the basic mutable object. `SEAL-RW-v1`, 65536, random nonce,
+	/// epoch_length 16. (Named `SEAL-simple` in draft-01.)
+	case editable
 	/// `SEAL-memory`: in-memory random access. `SEAL-RW-v1`, 16384, random nonce,
 	/// epoch_length 16.
 	case memory
@@ -77,25 +82,25 @@ public enum SEALScheme: CaseIterable, Equatable, Sendable {
 	case compact
 
 	var profile: SEALProfile {
-		self == .attachment ? .readOnly : .readWrite
+		self == .simple ? .readOnly : .readWrite
 	}
 	var segmentMax: UInt32 {
 		switch self {
-		case .attachment, .simple: 65536
+		case .simple, .editable: 65536
 		case .memory, .disk, .compact: 16384
 		}
 	}
 	var nonceMode: PayloadInfo.NonceMode {
 		switch self {
-		case .attachment, .compact: .derived
-		case .simple, .memory, .disk: .random
+		case .simple, .compact: .derived
+		case .editable, .memory, .disk: .random
 		}
 	}
 	var epochLength: UInt8 {
-		self == .attachment ? 32 : 16
+		self == .simple ? 32 : 16
 	}
 
-	/// Table 15: "A 256-bit-nonce suite (AEGIS-256, AEGIS-256X2) uses a flat key
+	/// Table 16: "A 256-bit-nonce suite (AEGIS-256, AEGIS-256X2) uses a flat key
 	/// (epoch_length 63) regardless of the row." Unreachable today — no 32-octet-
 	/// nonce AEAD is registered — but guarded now so registering one later cannot
 	/// silently produce spec-divergent presets.
