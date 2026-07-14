@@ -26,7 +26,7 @@ public enum SuiteRegistry {
 		}
 	}
 
-	/// Whether a `snap_id` is a known Table-9 code point. There is no snapshot backend
+	/// Whether a `snap_id` is a known Table-12 code point. There is no snapshot backend
 	/// type to resolve — ``MaskedMultisetHash`` is the only authenticator — so unlike
 	/// ``aead(id:)``/``kdf(id:)`` this is a validity predicate rather than a factory.
 	public static func isKnownSnapID(_ id: UInt16) -> Bool {
@@ -34,7 +34,7 @@ public enum SuiteRegistry {
 	}
 }
 
-/// `snap_id` code points (draft Table 9).
+/// `snap_id` code points (draft Table 12).
 public enum SnapID {
 	/// No snapshot authenticator.
 	public static let none: UInt16 = 0x0000
@@ -50,7 +50,7 @@ public enum ProtocolID {
 	public static let mutable = Bytes.ascii("SEAL-RW-v1")
 }
 
-/// Schedule + snapshot label strings (draft §4.4.3 Table 3, §4.7.4).
+/// Schedule + snapshot label strings (draft §4.4.3 Table 4, §4.7.4).
 enum Label {
 	/// Profile AAD label, bound as the first element of every segment AAD (§4.4.2).
 	static let aadLabel = Bytes.ascii("SEAL-DATA")

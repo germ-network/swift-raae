@@ -2,17 +2,17 @@ import Testing
 
 @testable import RAAE
 
-/// The `SEAL-attachment(aead_id, kdf_id)` named instantiation (§4.12) as consumed by
+/// The `SEAL-simple(aead_id, kdf_id)` named instantiation (§4.12; named `SEAL-attachment` in raae-01) as consumed by
 /// draft-sullivan-mls-attachments: write-once `SEAL-RO-v1`, derived nonces, 65536-octet
 /// segments, `epoch_length` 32, `snap_id` 0x0000, header `salt(32) || commitment(Nh)`,
 /// linear segments at `offset(i) = (32+Nh) + i·(65536+16)`, and `G = object_id`.
-@Suite("SEAL-attachment preset (MLS attachments)")
-struct SEALAttachmentTests {
+@Suite("SEAL-simple preset (MLS attachments)")
+struct SEALSimpleTests {
 	let cek = [UInt8](repeating: 0xAA, count: 32)
 	let salt = [UInt8](repeating: 0x04, count: 32)
 	let objectID = Bytes.ascii("test-attachment-object-id")
 	/// MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519 → AES-128-GCM + HKDF-SHA-256.
-	let suite128 = SEALAttachment.Suite(mlsCipherSuite: 0x0001)!
+	let suite128 = SEALSimple.Suite(mlsCipherSuite: 0x0001)!
 
 	@Test func mlsCipherSuiteMapping() {
 		// RFC 9420 §17.1 → (RFC 5116 aead_id, RFC 9180 kdf_id).
@@ -23,17 +23,17 @@ struct SEALAttachmentTests {
 			0x0007: (0x0002, 0x0002),
 		]
 		for (id, pair) in expected {
-			let suite = SEALAttachment.Suite(mlsCipherSuite: id)
+			let suite = SEALSimple.Suite(mlsCipherSuite: id)
 			#expect(suite?.aeadID == pair.aead, "suite \(id)")
 			#expect(suite?.kdfID == pair.kdf, "suite \(id)")
 		}
-		#expect(SEALAttachment.Suite(mlsCipherSuite: 0x0000) == nil)
-		#expect(SEALAttachment.Suite(mlsCipherSuite: 0x0008) == nil)
+		#expect(SEALSimple.Suite(mlsCipherSuite: 0x0000) == nil)
+		#expect(SEALSimple.Suite(mlsCipherSuite: 0x0008) == nil)
 	}
 
 	@Test func presetPayloadInfoShape() throws {
-		// §4.12 Table 15: SEAL-RO-v1, 65536, derived, epoch 32, snap 0x0000.
-		let info = SEALAttachment.payloadInfo(suite: suite128, salt: salt)
+		// §4.12 Table 16: SEAL-RO-v1, 65536, derived, epoch 32, snap 0x0000.
+		let info = SEALSimple.payloadInfo(suite: suite128, salt: salt)
 		#expect(info.aeadID == 0x0001)
 		#expect(info.segmentMax == 65536)
 		#expect(info.kdfID == 0x0001)
@@ -41,7 +41,7 @@ struct SEALAttachmentTests {
 		#expect(info.nonceMode == .derived)
 		#expect(info.epochLength == 32)
 		try info.validate()
-		let writer = try SEALAttachment.startEncrypt(
+		let writer = try SEALSimple.startEncrypt(
 			cek: cek, objectID: objectID, suite: suite128, salt: salt)
 		#expect(writer.schedule.isWriteOnceProfile)
 		#expect(writer.schedule.protocolID == ProtocolID.immutable)
@@ -49,7 +49,7 @@ struct SEALAttachmentTests {
 
 	@Test func layoutOffsets() throws {
 		// offset(i) = (32 + Nh) + i * (65536 + 16), attachments draft §5.1.
-		let layout = try SEALAttachment.layout(suite: suite128)
+		let layout = try SEALSimple.layout(suite: suite128)
 		#expect(layout.headerLength == 64)  // Nh = 32
 		#expect(layout.segmentStride == 65552)
 		#expect(layout.segmentOffset(0) == 64)
@@ -58,16 +58,16 @@ struct SEALAttachmentTests {
 		#expect(layout.segmentIndex(forPlaintextOffset: 65536) == 1)
 		// Per-suite Nh: SHA-384 → 80-octet header, SHA-512 → 96.
 		#expect(
-			try SEALAttachment.layout(
-				suite: SEALAttachment.Suite(mlsCipherSuite: 0x0007)!
+			try SEALSimple.layout(
+				suite: SEALSimple.Suite(mlsCipherSuite: 0x0007)!
 			).headerLength == 80)
 		#expect(
-			try SEALAttachment.layout(
-				suite: SEALAttachment.Suite(mlsCipherSuite: 0x0004)!
+			try SEALSimple.layout(
+				suite: SEALSimple.Suite(mlsCipherSuite: 0x0004)!
 			).headerLength == 96)
 		#expect(throws: PayloadSchedule.ScheduleError.unsupportedKDF(0x7777)) {
-			_ = try SEALAttachment.layout(
-				suite: SEALAttachment.Suite(aeadID: 0x0001, kdfID: 0x7777))
+			_ = try SEALSimple.layout(
+				suite: SEALSimple.Suite(aeadID: 0x0001, kdfID: 0x7777))
 		}
 
 		// Segment counts and object length: an empty attachment is one tag-only
@@ -81,14 +81,60 @@ struct SEALAttachmentTests {
 		#expect(layout.objectLength(plaintextLength: 65537) == 64 + 2 * 16 + 65537)
 	}
 
-	/// KAT pinning the SEAL-attachment schedule (CEK 32×0xAA, salt 32×0x04,
+	/// draft-sullivan-cfrg-raae-02 Appendix F.23 — the published end-to-end KAT for
+	/// `SEAL-simple(HKDF-SHA-256, AES-256-GCM)`: schedule, derived nonce, segment, and
+	/// stored object bytes. The raAE instantiation itself binds no `object_id` (`G` is
+	/// empty), so this exercises the core APIs directly — the MLS binding
+	/// (``SEALSimple/Writer``/``SEALSimple/Reader``) requires a non-empty `object_id`
+	/// and cannot produce this object.
+	@Test func f23PublishedVectorRoundTrips() throws {
+		let v = try Vectors.load("F23")
+		let schedule = try Vectors.schedule(from: v)
+		let sched = v["schedule"] as! [String: Any]
+		#expect(Hex.encode(schedule.commitment) == sched["commitment_hex"] as! String)
+		#expect(keyHex(schedule.payloadKey) == sched["payload_key_hex"] as! String)
+		#expect(keyHex(schedule.nonceBase!) == sched["nonce_base_hex"] as! String)
+		#expect(schedule.isWriteOnceProfile)
+
+		let seg = v["segment_0"] as! [String: Any]
+		let position = SegmentPosition(index: 0, isFinal: (seg["is_final"] as! Int) == 1)
+		// nonce(0, is_final=1) = nonce_base XOR 1: the base's low bit flips.
+		#expect(
+			Hex.encode(
+				try Segment.derivedNonce(
+					nonceBase: keyBytes(schedule.nonceBase!),
+					position: position))
+				== seg["nonce_hex"] as! String
+		)
+
+		// Decrypting the published ct||tag authenticates segment_key, nonce, and the
+		// empty derived-mode AAD; re-encrypting through the metered write-once path
+		// (GCM is non-MRAE) must reproduce it byte for byte.
+		let ctTag = Vectors.ciphertextWithTag(seg)
+		let plaintext = try Segment.decryptDerived(
+			schedule: schedule, position: position, associatedData: [],
+			ciphertext: ctTag)
+		#expect(plaintext.count == ctTag.count - schedule.aead.tagLength)
+		let encryptor = PayloadEncryptor(schedule: schedule)
+		let reencrypted = try encryptor.encryptDerived(
+			position: position, associatedData: [], plaintext: plaintext)
+		#expect(Hex.encode(reencrypted) == Hex.encode(ctTag))
+
+		// Linear immutable reduction (§4.11.4): object = salt || commitment || ct || tag.
+		let object =
+			((v["payload_info"] as! [String: Any])["salt_hex"] as! String)
+			+ (sched["commitment_hex"] as! String) + Hex.encode(ctTag)
+		#expect(object == v["stored_object_hex"] as! String)
+	}
+
+	/// KAT pinning the SEAL-simple schedule (CEK 32×0xAA, salt 32×0x04,
 	/// object_id "test-attachment-object-id", AES-128-GCM + HKDF-SHA-256). Expected
 	/// values were generated with an independent implementation of the draft's
 	/// labeled-KDF construction (§4.3/§4.5), itself verified byte-exact against
-	/// Appendix E.1/E.2 — this pins the preset's parameter plumbing (profile string,
+	/// Appendix F.1/F.2 — this pins the preset's parameter plumbing (profile string,
 	/// epoch 32, snap 0x0000, derived mode, G element) end to end.
 	@Test func attachmentScheduleKAT() throws {
-		let writer = try SEALAttachment.startEncrypt(
+		let writer = try SEALSimple.startEncrypt(
 			cek: cek, objectID: objectID, suite: suite128, salt: salt)
 		let schedule = writer.schedule
 		#expect(
@@ -122,8 +168,8 @@ struct SEALAttachmentTests {
 					nonceBase: base, position: .init(index: 1, isFinal: false)))
 				== "6a6e28f2de6f541440fe07d6")
 		// The SHA-384 suite derives a 48-octet (Nh) commitment.
-		let suite384 = SEALAttachment.Suite(mlsCipherSuite: 0x0007)!
-		let writer384 = try SEALAttachment.startEncrypt(
+		let suite384 = SEALSimple.Suite(mlsCipherSuite: 0x0007)!
+		let writer384 = try SEALSimple.startEncrypt(
 			cek: cek, objectID: objectID, suite: suite384, salt: salt)
 		#expect(
 			Hex.encode(writer384.schedule.commitment)
@@ -132,13 +178,13 @@ struct SEALAttachmentTests {
 	}
 
 	@Test func oneShotRoundTripAcrossSegmentBoundaries() throws {
-		let layout = try SEALAttachment.layout(suite: suite128)
+		let layout = try SEALSimple.layout(suite: suite128)
 		for length in [0, 1, 65535, 65536, 65537, 131_072, 131_079] {
 			let plaintext = (0..<length).map { UInt8(truncatingIfNeeded: $0) }
-			let object = try SEALAttachment.encrypt(
+			let object = try SEALSimple.encrypt(
 				cek: cek, objectID: objectID, suite: suite128, plaintext: plaintext)
 			#expect(object.count == layout.objectLength(plaintextLength: length))
-			let back = try SEALAttachment.decrypt(
+			let back = try SEALSimple.decrypt(
 				cek: cek, objectID: objectID, suite: suite128, object: object)
 			#expect(back == plaintext, "length \(length)")
 		}
@@ -149,10 +195,10 @@ struct SEALAttachmentTests {
 		// HKDF-SHA-256/384/512) round-trips a two-segment attachment.
 		let plaintext = (0..<65537).map { UInt8(truncatingIfNeeded: $0) }
 		for mlsID in UInt16(0x0001)...0x0007 {
-			let suite = SEALAttachment.Suite(mlsCipherSuite: mlsID)!
-			let object = try SEALAttachment.encrypt(
+			let suite = SEALSimple.Suite(mlsCipherSuite: mlsID)!
+			let object = try SEALSimple.encrypt(
 				cek: cek, objectID: objectID, suite: suite, plaintext: plaintext)
-			let back = try SEALAttachment.decrypt(
+			let back = try SEALSimple.decrypt(
 				cek: cek, objectID: objectID, suite: suite, object: object)
 			#expect(back == plaintext, "MLS suite \(mlsID)")
 		}
@@ -162,11 +208,11 @@ struct SEALAttachmentTests {
 		// The attachments draft §5.2 read path: initialize from the header once,
 		// then fetch and open only the segments covering the requested range.
 		let plaintext = (0..<140_000).map { UInt8(truncatingIfNeeded: $0) }
-		let object = try SEALAttachment.encrypt(
+		let object = try SEALSimple.encrypt(
 			cek: cek, objectID: objectID, suite: suite128, plaintext: plaintext,
 			salt: salt)
-		let layout = try SEALAttachment.layout(suite: suite128)
-		let reader = try SEALAttachment.startDecrypt(
+		let layout = try SEALSimple.layout(suite: suite128)
+		let reader = try SEALSimple.startDecrypt(
 			cek: cek, objectID: objectID, suite: suite128,
 			header: Array(object[..<layout.headerLength]))
 		// Segment 1 (of 0, 1, 2) alone: fetch its stride, open at its index.
@@ -186,26 +232,26 @@ struct SEALAttachmentTests {
 	@Test func wrongObjectIDFailsCommitment() throws {
 		// G = object_id: a wrong or missing object_id fails StartDec exactly like a
 		// wrong CEK (attachments draft §5.2).
-		let object = try SEALAttachment.encrypt(
+		let object = try SEALSimple.encrypt(
 			cek: cek, objectID: objectID, suite: suite128, plaintext: [1, 2, 3])
 		#expect(throws: PayloadSchedule.CommitmentError.commitmentMismatch) {
-			_ = try SEALAttachment.decrypt(
+			_ = try SEALSimple.decrypt(
 				cek: cek, objectID: Bytes.ascii("other-object-id"),
 				suite: suite128, object: object)
 		}
 		var wrongCEK = cek
 		wrongCEK[0] ^= 0x01
 		#expect(throws: PayloadSchedule.CommitmentError.commitmentMismatch) {
-			_ = try SEALAttachment.decrypt(
+			_ = try SEALSimple.decrypt(
 				cek: wrongCEK, objectID: objectID, suite: suite128, object: object)
 		}
 	}
 
 	@Test func tamperedObjectFails() throws {
 		let plaintext = (0..<70_000).map { UInt8(truncatingIfNeeded: $0) }
-		let object = try SEALAttachment.encrypt(
+		let object = try SEALSimple.encrypt(
 			cek: cek, objectID: objectID, suite: suite128, plaintext: plaintext)
-		let layout = try SEALAttachment.layout(suite: suite128)
+		let layout = try SEALSimple.layout(suite: suite128)
 
 		// A flipped salt octet re-derives a different schedule; a flipped
 		// commitment octet fails the constant-time compare.
@@ -213,7 +259,7 @@ struct SEALAttachmentTests {
 			var tampered = object
 			tampered[index] ^= 0x01
 			#expect(throws: PayloadSchedule.CommitmentError.commitmentMismatch) {
-				_ = try SEALAttachment.decrypt(
+				_ = try SEALSimple.decrypt(
 					cek: cek, objectID: objectID, suite: suite128,
 					object: tampered)
 			}
@@ -222,51 +268,51 @@ struct SEALAttachmentTests {
 		var tampered = object
 		tampered[layout.segmentOffset(1) + 5] ^= 0x01
 		#expect(throws: AEADError.authenticationFailure) {
-			_ = try SEALAttachment.decrypt(
+			_ = try SEALSimple.decrypt(
 				cek: cek, objectID: objectID, suite: suite128, object: tampered)
 		}
 	}
 
 	@Test func truncationAndFramingRejected() throws {
 		let plaintext = (0..<70_000).map { UInt8(truncatingIfNeeded: $0) }
-		let object = try SEALAttachment.encrypt(
+		let object = try SEALSimple.encrypt(
 			cek: cek, objectID: objectID, suite: suite128, plaintext: plaintext)
-		let layout = try SEALAttachment.layout(suite: suite128)
+		let layout = try SEALSimple.layout(suite: suite128)
 
 		// Dropping the final segment leaves the (non-final) segment 0 presented as
 		// final — the finality bit is bound through the derived nonce.
 		let dropped = Array(object[..<layout.segmentOffset(1)])
 		#expect(throws: AEADError.authenticationFailure) {
-			_ = try SEALAttachment.decrypt(
+			_ = try SEALSimple.decrypt(
 				cek: cek, objectID: objectID, suite: suite128, object: dropped)
 		}
 		// Truncating into the final tag leaves a sub-tag remainder.
 		let intoTag = Array(object[..<(layout.segmentOffset(1) + 8)])
-		#expect(throws: SEALAttachment.AttachmentError.invalidFinalSegmentLength(8)) {
-			_ = try SEALAttachment.decrypt(
+		#expect(throws: SEALSimple.AttachmentError.invalidFinalSegmentLength(8)) {
+			_ = try SEALSimple.decrypt(
 				cek: cek, objectID: objectID, suite: suite128, object: intoTag)
 		}
 		// Truncating a mid-segment ciphertext octet shifts the framing.
 		let midCut = Array(object[..<(object.count - 1)])
 		#expect(throws: AEADError.authenticationFailure) {
-			_ = try SEALAttachment.decrypt(
+			_ = try SEALSimple.decrypt(
 				cek: cek, objectID: objectID, suite: suite128, object: midCut)
 		}
 		// Shorter than header + one tag-only segment.
 		#expect(
-			throws: SEALAttachment.AttachmentError.objectTooShort(
+			throws: SEALSimple.AttachmentError.objectTooShort(
 				length: layout.headerLength, minimum: layout.headerLength + 16)
 		) {
-			_ = try SEALAttachment.decrypt(
+			_ = try SEALSimple.decrypt(
 				cek: cek, objectID: objectID, suite: suite128,
 				object: Array(object[..<layout.headerLength]))
 		}
 		// A header of the wrong length is rejected before any derivation.
 		#expect(
-			throws: SEALAttachment.AttachmentError.headerLengthMismatch(
+			throws: SEALSimple.AttachmentError.headerLengthMismatch(
 				expected: layout.headerLength, got: layout.headerLength - 1)
 		) {
-			_ = try SEALAttachment.startDecrypt(
+			_ = try SEALSimple.startDecrypt(
 				cek: cek, objectID: objectID, suite: suite128,
 				header: Array(object[..<(layout.headerLength - 1)]))
 		}
@@ -275,30 +321,30 @@ struct SEALAttachmentTests {
 	@Test func objectIDBoundsEnforced() throws {
 		// Non-empty and at most 255 octets (attachments draft §4.2 / §5.2), checked
 		// on both sides.
-		#expect(throws: SEALAttachment.AttachmentError.invalidObjectIDLength(0)) {
-			_ = try SEALAttachment.startEncrypt(cek: cek, objectID: [], suite: suite128)
+		#expect(throws: SEALSimple.AttachmentError.invalidObjectIDLength(0)) {
+			_ = try SEALSimple.startEncrypt(cek: cek, objectID: [], suite: suite128)
 		}
 		let oversize = [UInt8](repeating: 0x41, count: 256)
-		#expect(throws: SEALAttachment.AttachmentError.invalidObjectIDLength(256)) {
-			_ = try SEALAttachment.startEncrypt(
+		#expect(throws: SEALSimple.AttachmentError.invalidObjectIDLength(256)) {
+			_ = try SEALSimple.startEncrypt(
 				cek: cek, objectID: oversize, suite: suite128)
 		}
-		#expect(throws: SEALAttachment.AttachmentError.invalidObjectIDLength(0)) {
-			_ = try SEALAttachment.startDecrypt(
+		#expect(throws: SEALSimple.AttachmentError.invalidObjectIDLength(0)) {
+			_ = try SEALSimple.startDecrypt(
 				cek: cek, objectID: [], suite: suite128,
 				header: [UInt8](repeating: 0, count: 64))
 		}
 		// The 255-octet maximum itself is accepted.
 		let atMax = [UInt8](repeating: 0x41, count: 255)
-		_ = try SEALAttachment.startEncrypt(cek: cek, objectID: atMax, suite: suite128)
+		_ = try SEALSimple.startEncrypt(cek: cek, objectID: atMax, suite: suite128)
 	}
 
 	@Test func writerEnforcesWriteOnceAndLayout() throws {
-		let writer = try SEALAttachment.startEncrypt(
+		let writer = try SEALSimple.startEncrypt(
 			cek: cek, objectID: objectID, suite: suite128)
 		// Non-final segments must be exactly segment_size (computable offsets).
 		#expect(
-			throws: SEALAttachment.AttachmentError.invalidSegmentPlaintextLength(
+			throws: SEALSimple.AttachmentError.invalidSegmentPlaintextLength(
 				length: 3, isFinal: false)
 		) {
 			_ = try writer.encryptSegment(
@@ -306,7 +352,7 @@ struct SEALAttachmentTests {
 		}
 		// A final segment beyond segment_size is likewise malformed.
 		#expect(
-			throws: SEALAttachment.AttachmentError.invalidSegmentPlaintextLength(
+			throws: SEALSimple.AttachmentError.invalidSegmentPlaintextLength(
 				length: 65537, isFinal: true)
 		) {
 			_ = try writer.encryptSegment(
@@ -328,9 +374,9 @@ struct SEALAttachmentTests {
 	@Test func freshSaltIsGeneratedPerObject() throws {
 		// Defaulted salt: fresh per startEncrypt (attachments draft §7.3), 32 octets,
 		// and carried verbatim in the header.
-		let a = try SEALAttachment.startEncrypt(
+		let a = try SEALSimple.startEncrypt(
 			cek: cek, objectID: objectID, suite: suite128)
-		let b = try SEALAttachment.startEncrypt(
+		let b = try SEALSimple.startEncrypt(
 			cek: cek, objectID: objectID, suite: suite128)
 		#expect(Array(a.header[..<32]) != Array(b.header[..<32]))
 		#expect(a.header.count == 64)

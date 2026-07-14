@@ -1,10 +1,10 @@
 # Normative transcription — KDF layer (Stage 1)
 
-Transcribed from the vendored draft snapshot (see `SOURCE.md`; originally 2026-06-26,
-vector numbering updated to the 2026-07-06 refresh). Section numbers refer to that
-snapshot and may drift. **This is the authority for the code, not
-the plan's prose** (the plan was written from a summary and had label errors — noted
-below).
+Transcribed from the draft (see `SOURCE.md`; originally the 2026-06-26 snapshot,
+resynced to the published `draft-sullivan-cfrg-raae-02` on 2026-07-13). Section,
+table, and vector numbers refer to `-02` and may drift in later revisions. **This is
+the authority for the code, not the plan's prose** (the plan was written from a
+summary and had label errors — noted below).
 
 ## Notation (§2.2)
 
@@ -54,7 +54,7 @@ one-step (XOF):
 
 Protocol IDs (§4.10.2): immutable `"SEAL-RO-v1"`, mutable `"SEAL-RW-v1"`.
 
-Schedule labels (§4.4.3, Table 3) — **note plan said `snap_key`; spec says `acc_key`**:
+Schedule labels (§4.4.3, Table 4) — **note plan said `snap_key`; spec says `acc_key`**:
 
 | Role        | Label          |
 |-------------|----------------|
@@ -72,29 +72,34 @@ other field (no separate extra prefix).
 
 ## Suite registry
 
-`aead_id` (Table 7), `kdf_id` (Table 8) are `uint16`. Known ids:
-- AEAD: `0x0001` AES-128-GCM, `0x0002` AES-256-GCM, `0x0003` ChaCha20-Poly1305,
-  `0x0010` AEGIS-128L, `0x0011` AEGIS-256 (+ AES-256-GCM-SIV for MRAE).
-  For all Table-7 AEADs: `C_i = ct_i || tag_i`, tag is the final `Nt` octets.
-- KDF: `0x0001` HKDF-SHA-256, `0x0002` HKDF-SHA-512, `0x0013` TurboSHAKE-256.
-- `snap_id` (Table 9): `0x0000` none, `0x0001` masked multiset hash. Unknown values
-  are rejected in `PayloadSchedule.init` (like unknown `aead_id`/`kdf_id`).
-- `nonce_mode` (Table 10): `0x00` random, `0x01` derived.
+`aead_id` (Table 10), `kdf_id` (Table 11) are `uint16`. For all Table-10 AEADs:
+`C_i = ct_i || tag_i`, tag is the final `Nt` octets.
+- `snap_id` (Table 12): `0x0000` none, `0x0001` masked multiset hash, `0x0002`
+  digest transcript (§4.7.5), `0x0003` epoch digest tree (§4.7.6). This build
+  implements `0x0000`/`0x0001` only; every other value — including the two
+  `-02`-defined ones — is rejected in `PayloadSchedule.init` (like unknown
+  `aead_id`/`kdf_id`: the field is committed into the KDF, so accepting a value the
+  build cannot honor would bind parameters it cannot verify).
+- `nonce_mode` (Table 13): `0x00` random, `0x01` derived.
 
-**Table 7 (AEAD) — verified IANA code points, NOT sequential:**
-| name | aead_id | Nk | Nn | default mode |
-|------|---------|----|----|--------------|
-| AES-128-GCM | `0x0001` | 16 | 12 | random |
-| AES-256-GCM | `0x0002` | 32 | 12 | random |
-| ChaCha20-Poly1305 | `0x001D` | 32 | 12 | random |
-| AES-256-GCM-SIV | `0x001F` | 32 | 12 | derived |
-| AEGIS-256 | `0x0021` | 32 | 32 | random |
+**Table 10 (AEAD) — verified IANA code points, NOT sequential:**
+| name | aead_id | Nk | Nn | default mode | epoch_length |
+|------|---------|----|----|--------------|--------------|
+| AES-128-GCM | `0x0001` | 16 | 12 | random | 0–63 (default 0) |
+| AES-256-GCM | `0x0002` | 32 | 12 | random | 0–63 (default 0) |
+| ChaCha20-Poly1305 | `0x001D` | 32 | 12 | random | 0–63 (default 0) |
+| AES-256-GCM-SIV | `0x001F` | 32 | 12 | derived | 0–63 (default 0) |
+| AEGIS-256 | `0x0021` | 32 | 32 | random | 63 (flat key) |
+| AEGIS-256X2 | `0x0024` | 32 | 32 | random | 63 (flat key) |
 
-**Table 8 (KDF):** `0x0001` HKDF-SHA-256 (Nh 32), `0x0002` HKDF-SHA-**384** (Nh 48),
-`0x0003` HKDF-SHA-512 (Nh 64), `0x0013` TurboSHAKE-256 (Nh 64, one-step).
+(`-02` added AEGIS-256X2 and the per-AEAD `epoch_length` column; AEGIS is Stage 4.)
+
+**Table 11 (KDF):** `0x0001` HKDF-SHA-256 (Nh 32), `0x0002` HKDF-SHA-**384** (Nh 48),
+`0x0003` HKDF-SHA-512 (Nh 64), `0x0013` TurboSHAKE-256 (Nh 64, one-step; specified
+in RFC 9861, selected for the HPKE KDF registry by `draft-ietf-hpke-pq`).
 
 > ⚠️ The summary-based plan mis-stated these: it had ChaCha at `0x0003` and HKDF-SHA-512
-> at `0x0002`. The E.5 ChaCha vector (E.3 in the 2026-06-26 snapshot) caught both.
+> at `0x0002`. The F.5 ChaCha vector (E.3 in the 2026-06-26 snapshot) caught both.
 > Always take ids from this table.
 
 ### Derived nonce (§4.5.3)
@@ -115,7 +120,7 @@ payload_info = [ aead_id(uint16) | segment_max(uint32) | kdf_id(uint16) |
 The KDF applies `frame` to each element of this list when it is used as a KDF input.
 `segment_max` is a power of two ≥ 4096; `epoch_length` is `r ∈ [0,63]`.
 
-## Payload schedule (§4.5.1) — verified byte-exact against E.1
+## Payload schedule (§4.5.1) — verified byte-exact against F.1
 
 All keys derive from `CEK` (ikm) with `payload_info` as the KDF `info` list. The
 `info` list is the **7 payload_info elements in order**, each framed individually:
@@ -129,12 +134,11 @@ snap_key    = KDF(protocol_id, "acc_key",     [CEK], payload_info, Nh)
 nonce_base  = KDF(protocol_id, "nonce_base",  [CEK], payload_info, Nn)           ; derived mode only
 ```
 
-The draft prints a full KDF trace for the commitment; our Stage-1 KDF reproduces
-`prk` exactly, confirming framing + Extract/Expand are correct. (The vendored
-snapshot's printed trace shows the *pre-G* commitment `020e115b…`; after the empty-G
-resync below the code derives the published `-01` value `47ea0ec7…` — the `commit`
-label's `info` gained the framed empty-G element, while `prk`, which is
-`info`-independent, is unchanged.)
+The draft prints a full KDF trace for the commitment (F.1); our Stage-1 KDF
+reproduces its `prk` and `commitment` (`47ea0ec7…`) exactly, confirming framing +
+Extract/Expand are correct. (Historical: the pre-`-01` snapshots printed the *pre-G*
+commitment `020e115b…` — the `commit` label's `info` since gained the framed empty-G
+element, while `prk`, which is `info`-independent, never changed.)
 
 ### Global associated data G (§4.2.4, §4.5.1, §4.6)
 
@@ -145,23 +149,23 @@ only**, framed as the last element of the commit `info` — `payload_key` /
 re-supplies it, and a wrong or missing value fails as `commitmentMismatch`, exactly
 like a wrong CEK.
 
-> **Empty-G convention (aligned with `draft-…-raae-01`).** `G` is **always** the
-> last element of the commit `info`, including the empty default — draft-01 frames it
-> as "one zero-length element, so every commitment derivation includes it." The
-> vendored Appendix E corpus carries the -01 commitment values this produces (E.1
-> `47ea0ec7…`; the pre-G `020e115b…` is retired). `GlobalAADTests` pins the empty
-> default against -01 Appendix E.1 and non-empty G against Appendix E.2
-> (`G="raae-demo-g"` → `d8eedb1f…`). Only the commitment changed in the resync —
-> `payload_key` / `acc_key` / `nonce_base` and every ciphertext are byte-identical,
-> and every non-empty G was already byte-identical under the prior (empty-G-omitted)
-> convention, so the SEAL-attachment KATs (whose `G = object_id` is always non-empty)
-> are unaffected.
+> **Empty-G convention (per the published draft, `-01`/`-02` identical).** `G` is
+> **always** the last element of the commit `info`, including the empty default —
+> the draft frames it as "one zero-length element, so every commitment derivation
+> includes it." The vendored Appendix F corpus carries the commitment values this
+> produces (F.1 `47ea0ec7…`; the pre-G `020e115b…` is retired). `GlobalAADTests`
+> pins the empty default against Appendix F.1 and non-empty G against Appendix F.2
+> (`G="raae-demo-g"` → `d8eedb1f…`). Only the commitment changed in the empty-G
+> resync — `payload_key` / `acc_key` / `nonce_base` and every ciphertext are
+> byte-identical, and every non-empty G was already byte-identical under the prior
+> (empty-G-omitted) convention, so the SEAL-simple KATs (whose `G = object_id` is
+> always non-empty) were unaffected.
 >
-> ⚠️ The commitment is a stored, wire-visible value (e.g. the SEAL-attachment header
-> is `salt || commitment`), so this resync changes what empty-G objects verify
-> against. The `germ-network/mls-rs` companion must switch conventions in lockstep
-> for empty-G objects; non-empty-G objects (all SEAL-attachments) interoperate across
-> both conventions.
+> ⚠️ The commitment is a stored, wire-visible value (e.g. the SEAL-simple header is
+> `salt || commitment`), so that resync changed what empty-G objects verify against.
+> The `germ-network/mls-rs` companion must switch conventions in lockstep for
+> empty-G objects; non-empty-G objects (all MLS attachment objects) interoperate
+> across both conventions.
 
 ### Segment key via epoch key (§4.5.2)
 
@@ -172,21 +176,21 @@ segment_key(i):
 ```
 `epoch_length = r ∈ [0,63]` (MUST reject ≥ 64); `r = 0` ⇒ per-segment key.
 
-### Segment AAD (§4.4.2, Table 2)
+### Segment AAD (§4.4.2, Table 3)
 
 ```
 segment_aad(i, is_final, A_i):
     random mode:  encode(aad_label, uint64(i), uint8(is_final)[, A_i])   ; A_i appended only if non-empty
     derived mode: ""  if A_i empty, else encode(aad_label, A_i)          ; i/is_final are bound in the nonce
 ```
-`aad_label = "SEAL-DATA"`. Verified: E.1 seg0 aad = `encode("SEAL-DATA", uint64(0), uint8(1))`.
+`aad_label = "SEAL-DATA"`. Verified: F.1 seg0 aad = `encode("SEAL-DATA", uint64(0), uint8(1))`.
 
 ### EncryptSegment / DecryptSegment (§4.8)
 
 `C_i = AEAD.Encrypt(segment_key(i), nonce(i), segment_aad(i,is_final,A_i), P_i)`, split
 into `ct_i || tag_i`. Decrypt reverses it; AEAD auth failure ⇒ decryption error.
 
-### Masked multiset hash snapshot (§4.7.4) — verified vs E.1/E.9/E.16.1
+### Masked multiset hash snapshot (§4.7.4) — verified vs F.1/F.9/F.16.1
 
 ```
 contrib(i)   = KDF(protocol_id, "acc_contrib",  [snap_key], [uint64(i), tag(i)], Nh)
@@ -205,17 +209,19 @@ snapshot     = (acc XOR mask) || snapshot_tag                    ; wrapped_acc |
   constant-time; it accepts reordering but rejects add/drop/modify.
 - Empty object: `acc = 0^Nh`, `snapshot = mask || snapshot_tag` over zero segments.
 
-### Vector constants (Appendix E, informative)
+### Vector constants (Appendix F, informative)
 
-Every block: `protocol_id="SEAL-RW-v1"`, `CEK = 32×0xAA`, `salt = 32×0x04`. Vectors
-print ciphertext+tag but not plaintext; tests recover `P_i` by decrypting (the AEAD tag
-guarantees `segment_key`/`nonce`/`aad` are all correct), then re-encrypt under the
-vector's fixed nonce to pin the ciphertext in both directions.
+Every block: `CEK = 32×0xAA`, `salt = 32×0x04`; `protocol_id="SEAL-RW-v1"` for the
+RW corpus and `"SEAL-RO-v1"` for F.23. Vectors print ciphertext+tag but not
+plaintext; tests recover `P_i` by decrypting (the AEAD tag guarantees
+`segment_key`/`nonce`/`aad` are all correct), then re-encrypt under the vector's
+fixed nonce to pin the ciphertext in both directions.
 
-## SEAL-attachment named instantiation (§4.12, raae-01) — MLS attachments
+## SEAL-simple named instantiation (§4.12) — MLS attachments
 
-`SEAL-attachment(aead_id, kdf_id)` per `draft-sullivan-cfrg-raae-01` Table 15, the
-scheme `draft-sullivan-mls-attachments` (2026-07-06, referencing raae-01) consumes:
+`SEAL-simple(aead_id, kdf_id)` per `draft-sullivan-cfrg-raae-02` Table 16 (named
+`SEAL-attachment` in `-01`), the scheme `draft-sullivan-mls-attachments` (`-00`,
+2026-07-06) consumes:
 
 - Profile `SEAL-RO-v1`, `segment_max` 65536, `nonce_mode` derived,
   `epoch_length` 32, `snap_id` **0x0000** (no snapshot authenticator),
@@ -239,16 +245,20 @@ scheme `draft-sullivan-mls-attachments` (2026-07-06, referencing raae-01) consum
   object_id, 32)`). Whole-object integrity = open every segment (index `n-1` as
   final) against the *authenticated* length in the object reference.
 
-> ⚠️ **Post-01 naming drift.** The `-latest` draft renames this instantiation
-> `SEAL-simple` and rebinds the name `SEAL-attachment` to a new write-once
-> instantiation on a "digest transcript" authenticator (`snap_id 0x0002`, not
-> implemented here). We implement the **-01 semantics**, which is what the
-> attachments draft references; re-check the name/`snap_id` on the next resync.
+> **Naming (resolved in `-02`).** `-01` called this instantiation
+> `SEAL-attachment`; `-02` renamed it `SEAL-simple` and rebound `SEAL-attachment`
+> to a *different* new write-once instantiation (epoch digest tree `snap_id`
+> 0x0003, aligned layout with an epoch-heads region, `epoch_length` 10 — not
+> implemented here; nor is `SEAL-attachment-small`, digest transcript `snap_id`
+> 0x0002). The attachments draft (`-00`) references the linear-layout scheme, i.e.
+> `SEAL-simple`; re-check its wording when it revs against `-02`.
 
-`SEALAttachment` packages all of the above (suite mapping, layout, metered
-write-once `Writer`, commitment-verified `Reader`, one-shot encrypt/decrypt);
-`SEALAttachmentTests.attachmentScheduleKAT` pins the schedule against an
-independent implementation.
+`SEALSimple` packages all of the above (suite mapping, layout, metered write-once
+`Writer`, commitment-verified `Reader`, one-shot encrypt/decrypt);
+`SEALSimpleTests.f23PublishedVectorRoundTrips` pins the instantiation end-to-end
+against the published Appendix F.23 vector (empty `G`, core APIs), and
+`SEALSimpleTests.attachmentScheduleKAT` pins the MLS-bound schedule (non-empty
+`G = object_id`) against an independent implementation.
 
 ## Implementation safety rails (beyond the spec text)
 
@@ -267,6 +277,16 @@ independent implementation.
   `writeOnceRequiresMeteredEncryptor`, since an unmetered rewrite would reuse the
   segment's fixed nonce. Decryption is ungated. Cross-process/multi-writer discipline
   (seeding counters via `persistableState`) remains the host's obligation.
+- **Named-profile `(nonce_mode, snap_id)` tuples are enforced** (§4.10.2 Table 14:
+  "An encryptor MUST set payload_info to a (nonce_mode, snap_id) tuple that is
+  valid for its protocol_id, and a decryptor MUST reject any object whose tuple is
+  not"). Of this build's authenticators: `SEAL-RW-v1` requires `snap_id = 0x0001`
+  (the `-02` table also admits 0x0002/0x0003, which are rejected earlier as
+  unsupported) and `SEAL-RO-v1` requires `nonce_mode = derived` with
+  `snap_id = 0x0000` (likewise 0x0002/0x0003 in `-02`). Off-profile tuples throw
+  `invalidProfileTuple` from `PayloadSchedule.init` — the decrypt-side MUST flows
+  through `startDecrypt`, which uses the same initializer. Unknown protocol IDs
+  define their own tuples and are unconstrained (only the MRAE gate applies).
 - **CEK length is fixed at 32 octets** and validated in `PayloadSchedule.init`.
 - **`nonce_mode` is enforced on every segment path.** `Segment.encrypt/decryptRandom`
   require a random-mode schedule and `encrypt/decryptDerived` a derived-mode one
@@ -313,5 +333,5 @@ independent implementation.
 
 Two-step HKDF KDFs + AES-256-GCM / ChaCha20-Poly1305 AEADs via swift-crypto, framing,
 and the suite registry. One-step XOF (TurboSHAKE) and AEGIS land in Stage 4. KDF
-correctness is fully pinned only in Stage 2 against the Appendix E commitment vector;
+correctness is fully pinned only in Stage 2 against the Appendix F commitment vector;
 Stage 1 tests cover framing, HKDF determinism/structure, and AEAD round-trips.

@@ -2,7 +2,7 @@ import Crypto
 import Foundation
 import _CryptoExtras
 
-/// AES-256-GCM-SIV, `aead_id = 0x001F` (Table 7, IANA `AEAD_AES_256_GCM_SIV`).
+/// AES-256-GCM-SIV, `aead_id = 0x001F` (Table 10, IANA `AEAD_AES_256_GCM_SIV`).
 /// `Nk=32, Nn=12, Nt=16`.
 ///
 /// This is the MRAE (nonce-misuse-resistant) suite SEAL uses for derived nonce mode:

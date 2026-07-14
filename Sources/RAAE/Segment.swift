@@ -67,7 +67,7 @@ public enum Segment {
 		}
 	}
 
-	/// `segment_aad(i, is_final, A_i)` for the random nonce mode (§4.4.2, Table 2).
+	/// `segment_aad(i, is_final, A_i)` for the random nonce mode (§4.4.2, Table 3).
 	///
 	/// `kdf` supplies the framing's over-large-field digest (`LH`); it matters only when
 	/// `associatedData` exceeds 65534 octets, but omitting it there would silently
@@ -86,7 +86,7 @@ public enum Segment {
 		return Framing.encode(elements, longHash: kdf.longHash)
 	}
 
-	/// `segment_aad(i, is_final, A_i)` for derived nonce mode (§4.4.2, Table 2): index
+	/// `segment_aad(i, is_final, A_i)` for derived nonce mode (§4.4.2, Table 3): index
 	/// and finality are bound in the nonce, so the AAD is empty unless `A_i` is present.
 	public static func aadDerivedMode(associatedData: [UInt8], kdf: KeyDerivation) -> [UInt8] {
 		if associatedData.isEmpty { return [] }

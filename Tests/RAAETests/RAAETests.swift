@@ -5,7 +5,7 @@ import Testing
 @Suite("Suite registry (Tables 7–8)")
 struct SuiteRegistryTests {
 	@Test func resolvesKnownAEADs() {
-		// IANA AEAD code points (Table 7).
+		// IANA AEAD code points (Table 10).
 		#expect(SuiteRegistry.aead(id: 0x0001)?.keyLength == 16)  // AES-128-GCM
 		#expect(SuiteRegistry.aead(id: 0x0002)?.keyLength == 32)  // AES-256-GCM
 		#expect(SuiteRegistry.aead(id: 0x001D)?.id == 0x001D)  // ChaCha20-Poly1305

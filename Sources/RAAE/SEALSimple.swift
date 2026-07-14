@@ -1,8 +1,15 @@
 import Foundation
 
-/// The `SEAL-attachment(aead_id, kdf_id)` named instantiation (draft §4.12) — SEAL's
+/// The `SEAL-simple(aead_id, kdf_id)` named instantiation (draft §4.12) — SEAL's
 /// write-once random-access preset, and the scheme `draft-sullivan-mls-attachments`
 /// uses for MLS attachment encryption.
+///
+/// - Note: `draft-…-raae-01` named this instantiation `SEAL-attachment`; `-02`
+///   renamed it `SEAL-simple` and rebound the name `SEAL-attachment` to a *different*
+///   new write-once instantiation (epoch digest tree, `snap_id` 0x0003, aligned
+///   layout — not implemented here). The attachments draft (`-00`) references the
+///   linear-layout scheme, i.e. this one; the published `-02` Appendix F.23 pins it
+///   end-to-end (`SEALSimpleTests`).
 ///
 /// The instantiation fixes everything but the cipher suite: the write-once
 /// `SEAL-RO-v1` profile, derived nonce mode, `segment_max` 65536 (64 KiB),
@@ -37,8 +44,8 @@ import Foundation
 /// encryptor's (attachments draft §7.3): never re-encrypt under a previously used
 /// `(object_id, salt)` pair, including after a crash or retry — ``startEncrypt``
 /// generates a fresh random salt by default.
-public enum SEALAttachment {
-	/// `segment_size` — plaintext octets per non-final segment (§4.12 Table 15).
+public enum SEALSimple {
+	/// `segment_size` — plaintext octets per non-final segment (§4.12 Table 16).
 	public static let segmentSize = 65536
 	/// AEAD tag length. Every admitted suite (AES-GCM, ChaCha20-Poly1305) has `Nt = 16`.
 	public static let tagLength = 16
@@ -71,9 +78,9 @@ public enum SEALAttachment {
 		case invalidSegmentPlaintextLength(length: Int, isFinal: Bool)
 	}
 
-	/// The cipher suite: SEAL's `aead_id`/`kdf_id` code points (Tables 7–8), which for
-	/// MLS are the IANA registrations of the group's cipher suite's AEAD (RFC 5116) and
-	/// KDF (RFC 9180) — the attachments draft §5.
+	/// The cipher suite: SEAL's `aead_id`/`kdf_id` code points (Tables 10–11), which
+	/// for MLS are the IANA registrations of the group's cipher suite's AEAD (RFC 5116)
+	/// and KDF (RFC 9180) — the attachments draft §5.
 	public struct Suite: Equatable, Sendable {
 		public let aeadID: UInt16
 		public let kdfID: UInt16
@@ -152,7 +159,7 @@ public enum SEALAttachment {
 	}
 
 	/// The instantiation's `payload_info` for a suite and per-object salt (§4.12
-	/// Table 15). Exposed for interop testing; ``startEncrypt(cek:objectID:suite:salt:)``
+	/// Table 16). Exposed for interop testing; ``startEncrypt(cek:objectID:suite:salt:)``
 	/// and ``startDecrypt(cek:objectID:suite:header:)`` build it internally.
 	public static func payloadInfo(suite: Suite, salt: [UInt8]) -> PayloadInfo {
 		PayloadInfo(

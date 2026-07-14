@@ -1,7 +1,7 @@
 import Crypto
 import Foundation
 
-/// A key derivation function as parameterized by the draft (Table 8), exposing the
+/// A key derivation function as parameterized by the draft (Table 11), exposing the
 /// single entry point `KDF(protocol_id, label, ikm, info, L)` from §4.3.
 ///
 /// `ikm` and `info` are *lists* of byte strings; each element is framed individually
@@ -11,7 +11,7 @@ public protocol KeyDerivation: Sendable {
 	/// Output size of the native primitive, in octets (`Nh` in the draft).
 	var outputSize: Int { get }
 
-	/// `kdf_id` from Table 8.
+	/// `kdf_id` from Table 11.
 	var id: UInt16 { get }
 
 	/// `LH(x)` — the over-large-field digest used by framing (§4.3), label `"raAE-LP-v1"`.
@@ -53,7 +53,7 @@ extension KeyDerivation {
 /// Label for the over-large-field digest `LH` (draft §4.3).
 private let longHashLabel = Bytes.ascii("raAE-LP-v1")
 
-/// Two-step HKDF KDF (draft §4.3, Table 8). Generic over the swift-crypto hash.
+/// Two-step HKDF KDF (draft §4.3, Table 11). Generic over the swift-crypto hash.
 struct HKDFKeyDerivation<H: HashFunction>: KeyDerivation {
 	let id: UInt16
 
@@ -120,11 +120,11 @@ struct HKDFKeyDerivation<H: HashFunction>: KeyDerivation {
 	}
 }
 
-/// HKDF-SHA-256, `kdf_id = 0x0001`, `Nh = 32` (Table 8).
+/// HKDF-SHA-256, `kdf_id = 0x0001`, `Nh = 32` (Table 11).
 func makeHKDFSHA256() -> HKDFKeyDerivation<SHA256> { .init(id: 0x0001) }
 
-/// HKDF-SHA-384, `kdf_id = 0x0002`, `Nh = 48` (Table 8).
+/// HKDF-SHA-384, `kdf_id = 0x0002`, `Nh = 48` (Table 11).
 func makeHKDFSHA384() -> HKDFKeyDerivation<SHA384> { .init(id: 0x0002) }
 
-/// HKDF-SHA-512, `kdf_id = 0x0003`, `Nh = 64` (Table 8).
+/// HKDF-SHA-512, `kdf_id = 0x0003`, `Nh = 64` (Table 11).
 func makeHKDFSHA512() -> HKDFKeyDerivation<SHA512> { .init(id: 0x0003) }

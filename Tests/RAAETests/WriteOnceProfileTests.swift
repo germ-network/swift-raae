@@ -9,10 +9,11 @@ import Testing
 @Suite("Write-once profile (SEAL-RO-v1)")
 struct WriteOnceProfileTests {
 	func makeSchedule(
-		protocolID: [UInt8], aeadID: UInt16, epochLength: UInt8 = 0
+		protocolID: [UInt8], aeadID: UInt16, epochLength: UInt8 = 0,
+		snapID: UInt16 = SnapID.none
 	) throws -> PayloadSchedule {
 		let info = PayloadInfo(
-			aeadID: aeadID, segmentMax: 16384, kdfID: 0x0001, snapID: 0x0001,
+			aeadID: aeadID, segmentMax: 16384, kdfID: 0x0001, snapID: snapID,
 			nonceMode: .derived, epochLength: epochLength,
 			salt: [UInt8](repeating: 0x04, count: 32))
 		return try PayloadSchedule(
@@ -29,8 +30,11 @@ struct WriteOnceProfileTests {
 			#expect(schedule.isWriteOnceProfile)
 		}
 		// The mutable profile is not write-once (its derived mode still requires MRAE;
-		// see SecurityHardeningTests.derivedModeWithNonMRAEIsRejected).
-		let mutableSIV = try makeSchedule(protocolID: ProtocolID.mutable, aeadID: 0x001F)
+		// see SecurityHardeningTests.derivedModeWithNonMRAEIsRejected). It also
+		// requires a snapshot authenticator (§4.10.2 Table 14).
+		let mutableSIV = try makeSchedule(
+			protocolID: ProtocolID.mutable, aeadID: 0x001F,
+			snapID: SnapID.maskedMultisetHash)
 		#expect(!mutableSIV.isWriteOnceProfile)
 	}
 
@@ -122,49 +126,48 @@ struct WriteOnceProfileTests {
 	}
 
 	/// KAT pinning the SEAL-RO-v1 schedule bytes (CEK 32×0xAA, salt 32×0x04,
-	/// AES-256-GCM, HKDF-SHA-256, derived mode, epoch_length 0). The secret keys were
-	/// generated with an independent implementation of the draft's labeled-KDF
-	/// construction (§4.3/§4.5), itself verified byte-exact against Appendix E.1 —
-	/// this guards the profile-string plumbing: SEAL-RO-v1 derivations differ from
-	/// the vendored RW vectors only through `protocol_id`. The commitment reflects the
-	/// draft-sullivan-cfrg-raae-01 always-framed-empty-G convention (§4.5.1; the
-	/// independent generator predated it) — the secret keys never take `G`, so they are
-	/// unchanged by the resync.
+	/// AES-256-GCM, HKDF-SHA-256, derived mode, snap_id 0x0000, epoch_length 0).
+	/// Expected values were cross-verified against an independent from-scratch
+	/// implementation of the draft's labeled-KDF construction (§4.3/§4.5), itself
+	/// verified byte-exact against the published Appendix F.1 and F.23 vectors — this
+	/// guards the profile-string plumbing: SEAL-RO-v1 derivations differ from the
+	/// vendored RW vectors only through `protocol_id` (and F.23 is the published
+	/// neighbor of this schedule at segment_max 65536 / epoch_length 32).
 	@Test func writeOnceScheduleKAT() throws {
 		let schedule = try makeSchedule(protocolID: ProtocolID.immutable, aeadID: 0x0002)
 		#expect(
 			Hex.encode(schedule.commitment)
-				== "71e7b3c7b33b73a45e77492c45cd3dccbe3eda769dbce5f3455d0ebc8bbe3004"
+				== "0436f553c7263df555678aa4b69e62744cfb83b8766c61547e7056f5ada0ebd1"
 		)
 		#expect(
 			keyHex(schedule.payloadKey)
-				== "ac89c67fb105c26268b86c3d6c32af4078ff07cae372e67cc745a66eb244dbc7"
+				== "12214bbacc661faa6eb59408bb20a5a723a004aebf7ad4793714a326dfa0b9be"
 		)
 		#expect(
 			keyHex(schedule.snapKey)
-				== "ab5071a5264b3c5ab5016a659ce35e848c2982ea18662090613fcd1b9de3ca0e"
+				== "9409c75ebaec9400e3bc14506cb1ed3cf20a746b3a55ff83ce9bbff6ff1a1b36"
 		)
 		#expect(schedule.nonceBase != nil)
-		#expect(keyHex(schedule.nonceBase!) == "e9b82704e941ef3b55b2ad7b")
+		#expect(keyHex(schedule.nonceBase!) == "dd51735b458d7b2c3131986e")
 		// epoch_length 0 ⇒ segment_key(i) = epoch_key(i), distinct per segment.
 		#expect(
 			keyHex(schedule.segmentKey(index: 0))
-				== "99f0bf82058a0728da317a2d2b4bbb9f3b7d9c613c38f7f7186bd2edb36f200a"
+				== "248158f175ac87ab6aa38d30b520c5f49c80bd86a3ffec28c2da5dc8055bd0d6"
 		)
 		#expect(
 			keyHex(schedule.segmentKey(index: 1))
-				== "018d3521b09160467e208bcd326fa9c882003bff3af773f863a65fa5d4510a87"
+				== "19399e1302ed3dc9e3bfa4ac952b6fba799c2a5830fb5ee34afbdd52dd4545a0"
 		)
 		let base = keyBytes(schedule.nonceBase!)
 		#expect(
 			Hex.encode(
 				try Segment.derivedNonce(
 					nonceBase: base, position: .init(index: 0, isFinal: false)))
-				== "e9b82704e941ef3b55b2ad7b")
+				== "dd51735b458d7b2c3131986e")
 		#expect(
 			Hex.encode(
 				try Segment.derivedNonce(
 					nonceBase: base, position: .init(index: 1, isFinal: true)))
-				== "e9b82704e941ef3b55b2ad78")
+				== "dd51735b458d7b2c3131986d")
 	}
 }

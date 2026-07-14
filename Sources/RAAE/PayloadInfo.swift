@@ -8,7 +8,7 @@ import Foundation
 /// nonce_mode(uint8) | epoch_length(uint8) | salt(32)
 /// ```
 public struct PayloadInfo: Equatable, Sendable {
-	/// Nonce construction (draft Table 10).
+	/// Nonce construction (draft Table 13).
 	public enum NonceMode: UInt8, Equatable, Sendable {
 		case random = 0x00
 		case derived = 0x01

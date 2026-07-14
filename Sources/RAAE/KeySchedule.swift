@@ -24,10 +24,10 @@ public struct PayloadSchedule {
 	///
 	/// - Note: `G` is **always** framed as the last element of the commitment info,
 	///   including the empty default (a zero-length element), per
-	///   draft-sullivan-cfrg-raae-01 ("always the last element of the commitment info
-	///   … so every commitment derivation includes it"). The vendored Appendix E corpus
-	///   carries the -01 commitment values this produces (`Spec/SOURCE.md`); the empty-G
-	///   pin is `GlobalAADTests`, and non-empty `G` is pinned against Appendix E.2 there.
+	///   draft-sullivan-cfrg-raae-02 ("always the last element of the commitment info
+	///   … so every commitment derivation includes it"). The vendored Appendix F corpus
+	///   carries the commitment values this produces (`Spec/SOURCE.md`); the empty-G
+	///   pin is `GlobalAADTests`, and non-empty `G` is pinned against Appendix F.2 there.
 	public let globalAAD: [UInt8]
 	public let aead: AEAD
 	public let kdf: KeyDerivation
@@ -69,7 +69,7 @@ public struct PayloadSchedule {
 	public enum ScheduleError: Error, Equatable {
 		case unsupportedAEAD(UInt16)
 		case unsupportedKDF(UInt16)
-		/// `snap_id` was not a known Table-9 code point (``SnapID``). Unknown values are
+		/// `snap_id` was not a known Table-12 code point (``SnapID``). Unknown values are
 		/// rejected like unknown `aead_id`/`kdf_id` — the field is committed into the
 		/// KDF, so silently accepting one would bind parameters this build cannot honor.
 		case unsupportedSnapID(UInt16)
@@ -88,6 +88,16 @@ public struct PayloadSchedule {
 		/// derived nonce is used exactly once; unknown protocol IDs are treated as
 		/// rewritable (strict).
 		case derivedModeRequiresMRAE(UInt16)
+		/// The `(nonce_mode, snap_id)` tuple is not valid for the named profile
+		/// (§4.10.2 Table 14): `SEAL-RW-v1` requires a snapshot authenticator
+		/// (`snap_id != 0x0000`), and `SEAL-RO-v1` requires a derived nonce with
+		/// `snap_id = 0x0000` (of this build's supported authenticators). An encryptor
+		/// MUST NOT emit such a tuple and a decryptor MUST reject it — the decrypt-side
+		/// MUST flows through ``startDecrypt(protocolID:cek:payloadInfo:globalAAD:publishedCommitment:expectedCommitmentLength:)``,
+		/// which uses this same initializer. Unknown protocol IDs carry no tuple
+		/// constraint (a custom profile defines its own; only the §4.5.3.2 MRAE gate
+		/// applies).
+		case invalidProfileTuple(nonceMode: UInt8, snapID: UInt16)
 	}
 
 	/// Failures of the §4.6 commitment check. Kept distinct from ``ScheduleError``
@@ -111,7 +121,7 @@ public struct PayloadSchedule {
 	/// - Parameter globalAAD: the global associated data `G` (§4.2.4), bound into the
 	///   commitment as an extra framed element after `payload_info` (§4.5.1) — see
 	///   ``globalAAD``. Defaults to empty, which is still framed (as a zero-length
-	///   element) per draft-01; a wrong or missing `G` fails as `commitmentMismatch`.
+	///   element) per the draft; a wrong or missing `G` fails as `commitmentMismatch`.
 	/// - Parameter commitmentLength: defaults to the KDF's `Nh`; must be in
 	///   `[16, min(255·Nh, 0xFFFE)]`. Out-of-range values throw
 	///   ``ScheduleError/commitmentTooShort(_:)`` / ``ScheduleError/commitmentTooLong(_:)``.
@@ -138,11 +148,27 @@ public struct PayloadSchedule {
 		guard SuiteRegistry.isKnownSnapID(payloadInfo.snapID) else {
 			throw ScheduleError.unsupportedSnapID(payloadInfo.snapID)
 		}
+		// §4.10.2 Table 14: only certain (nonce_mode, snap_id) tuples are valid under
+		// each named profile, and a decryptor MUST reject any object off that table.
+		// Of this build's authenticators: SEAL-RW-v1 requires the masked multiset hash
+		// (every rewritable object carries whole-object integrity), and SEAL-RO-v1
+		// requires a derived nonce with no snapshot authenticator. Unknown protocol IDs
+		// define their own tuples and pass (only the §4.5.3.2 MRAE gate below applies).
+		let isWriteOnce = protocolID == ProtocolID.immutable
+		let offProfile =
+			(protocolID == ProtocolID.mutable && payloadInfo.snapID == SnapID.none)
+			|| (isWriteOnce
+				&& (payloadInfo.nonceMode != .derived
+					|| payloadInfo.snapID != SnapID.none))
+		guard !offProfile else {
+			throw ScheduleError.invalidProfileTuple(
+				nonceMode: payloadInfo.nonceMode.rawValue,
+				snapID: payloadInfo.snapID)
+		}
 		// Derived nonce mode fixes each segment's nonce, so a rewrite would reuse it.
 		// §4.5.3.2: with a non-MRAE AEAD the mode MUST be confined to a write-once
 		// profile. Permit the pairing only under SEAL-RO-v1 (each segment encrypted
 		// exactly once); any other protocol ID — including unknown ones — stays strict.
-		let isWriteOnce = protocolID == ProtocolID.immutable
 		guard !(payloadInfo.nonceMode == .derived && !aead.isMRAE && !isWriteOnce) else {
 			throw ScheduleError.derivedModeRequiresMRAE(payloadInfo.aeadID)
 		}
@@ -170,9 +196,9 @@ public struct PayloadSchedule {
 		let info = payloadInfo.kdfInfoElements
 		// §4.5.1: G binds into the commitment only, as an extra framed element after
 		// payload_info — payload_key / acc_key / nonce_base never take it. G is always
-		// framed as the last commitment element (a zero-length element when empty), per
-		// draft-sullivan-cfrg-raae-01 ("always the last element of the commitment info
-		// … so every commitment derivation includes it").
+		// framed as the last commitment element (a zero-length element when empty):
+		// "always the last element of the commitment info … so every commitment
+		// derivation includes it".
 		let commitInfo = info + [globalAAD]
 		// commitment is a public authenticator (not secret) → derive(...) -> [UInt8].
 		self.commitment = kdf.derive(

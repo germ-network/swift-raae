@@ -44,19 +44,19 @@ let snapshot = hash.snapshotValue(
 ```
 
 For MLS attachment encryption (`draft-sullivan-mls-attachments`), skip the manual
-parameter selection: ``SEALAttachment`` packages the draft's
-`SEAL-attachment(aead_id, kdf_id)` named instantiation (§4.12) — write-once profile,
+parameter selection: ``SEALSimple`` packages the draft's
+`SEAL-simple(aead_id, kdf_id)` named instantiation (§4.12; named `SEAL-attachment` in raae-01) — write-once profile,
 derived nonces, 64 KiB segments, a `salt || commitment` header, and the attachment's
 `object_id` bound as the global associated data `G`:
 
 ```swift
-let suite = SEALAttachment.Suite(mlsCipherSuite: 0x0001)!
-let object = try SEALAttachment.encrypt(
+let suite = SEALSimple.Suite(mlsCipherSuite: 0x0001)!
+let object = try SEALSimple.encrypt(
     cek: cek,             // 32 octets, derived per object_id on the MLS side
     objectID: objectID,   // the attachment's object_id (bound as G)
     suite: suite,
     plaintext: fileBytes)
-let back = try SEALAttachment.decrypt(
+let back = try SEALSimple.decrypt(
     cek: cek, objectID: objectID, suite: suite, object: object)
 ```
 
@@ -90,9 +90,9 @@ the host storing the object:
 
 ### MLS attachments
 
-- ``SEALAttachment``
-- ``SEALAttachment/Suite``
-- ``SEALAttachment/Layout``
+- ``SEALSimple``
+- ``SEALSimple/Suite``
+- ``SEALSimple/Layout``
 
 ### Message parameters and key schedule
 

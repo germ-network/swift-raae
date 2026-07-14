@@ -9,10 +9,10 @@ public enum AEADError: Error, Equatable {
 	case authenticationFailure
 }
 
-/// An AEAD as parameterized by the draft (Table 7). For every Table-7 AEAD the output
+/// An AEAD as parameterized by the draft (Table 10). For every Table-10 AEAD the output
 /// is `C_i = ct_i || tag_i` with the tag in the final `Nt` octets (§4.8).
 public protocol AEAD: Sendable {
-	/// `aead_id` from Table 7.
+	/// `aead_id` from Table 10.
 	var id: UInt16 { get }
 	/// Key size in octets (`Nk` in the draft).
 	var keyLength: Int { get }
@@ -23,7 +23,7 @@ public protocol AEAD: Sendable {
 
 	/// Whether this AEAD is nonce-misuse-resistant (MRAE). Derived nonce mode reuses a
 	/// segment's fixed nonce on rewrite, so a rewritable profile must use an MRAE AEAD
-	/// (draft Table 4). Defaults to `false`.
+	/// (§6.2 Table 24). Defaults to `false`.
 	var isMRAE: Bool { get }
 
 	/// Encrypt, returning `ct || tag`. The key is a `SymmetricKey` so segment keys never
@@ -53,7 +53,7 @@ extension AEAD {
 	}
 }
 
-/// AES-128-GCM, `aead_id = 0x0001` (Table 7). `Nk=16, Nn=12, Nt=16`.
+/// AES-128-GCM, `aead_id = 0x0001` (Table 10). `Nk=16, Nn=12, Nt=16`.
 struct AES128GCM: AEAD {
 	let id: UInt16 = 0x0001
 	let keyLength = 16
@@ -95,7 +95,7 @@ struct AES128GCM: AEAD {
 	}
 }
 
-/// AES-256-GCM, `aead_id = 0x0002` (Table 7). `Nk=32, Nn=12, Nt=16`.
+/// AES-256-GCM, `aead_id = 0x0002` (Table 10). `Nk=32, Nn=12, Nt=16`.
 struct AES256GCM: AEAD {
 	let id: UInt16 = 0x0002
 	let keyLength = 32
@@ -140,7 +140,7 @@ struct AES256GCM: AEAD {
 	}
 }
 
-/// ChaCha20-Poly1305, `aead_id = 0x001D` (Table 7, IANA `AEAD_CHACHA20_POLY1305`).
+/// ChaCha20-Poly1305, `aead_id = 0x001D` (Table 10, IANA `AEAD_CHACHA20_POLY1305`).
 /// `Nk=32, Nn=12, Nt=16`.
 struct ChaCha20Poly1305: AEAD {
 	let id: UInt16 = 0x001D

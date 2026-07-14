@@ -3,7 +3,7 @@ import Testing
 
 @testable import RAAE
 
-@Suite("AEAD (§4.8, Table 7)")
+@Suite("AEAD (§4.8, Table 10)")
 struct AEADTests {
 	static let suites: [(String, any AEAD)] = [
 		("AES-256-GCM", AES256GCM()),

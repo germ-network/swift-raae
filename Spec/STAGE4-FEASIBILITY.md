@@ -11,10 +11,11 @@ a `seal`/`open` API mirroring `AES.GCM`, plus `Nonce(data:)` and
 
 Decision: **implement** (`AEAD_GCMSIV.swift`). This is the MRAE suite SEAL needs for
 derived-mode rewrites, and it is a vetted implementation — no hand-rolled crypto.
-Verified byte-exact against Appendix **E.17.1** (E.15.1 in the 2026-06-26 snapshot;
-derived nonces, deterministic re-encryption, and the same-nonce rewrite).
+Verified byte-exact against Appendix **F.17.1** (E.17.1 in `-01`, E.15.1 in the
+2026-06-26 snapshot; derived nonces, deterministic re-encryption, and the same-nonce
+rewrite).
 
-## AEGIS-128L / AEGIS-256 (`0x0020` / `0x0021`) — CUT from v1 ❌
+## AEGIS-128L / AEGIS-256 / AEGIS-256X2 (`0x0020` / `0x0021` / `0x0024`) — CUT from v1 ❌
 
 Not present in swift-crypto or CryptoKit. AEGIS is built from the AES round function;
 a competitive implementation needs AES-NI/ARMv8-Crypto intrinsics, which CryptoKit does
@@ -33,7 +34,7 @@ libsodium dependency becomes acceptable.
 Not present in swift-crypto. It is the one-step XOF KDF (Keccak-p[1600,12]); the KDF
 protocol already anticipates the one-step form, but the permutation itself would be a
 hand-rolled Keccak. That is feasible in pure Swift (~200 lines, and a hash has no
-secret-dependent control flow), and has byte-exact vectors (E.13), but it is net-new
+secret-dependent control flow), and has byte-exact vectors (F.15), but it is net-new
 unvetted crypto.
 
 Decision: **defer.** It is the strongest follow-up candidate (lowest risk of the three,

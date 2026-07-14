@@ -16,7 +16,7 @@ struct UsageLimitsTests {
 			payloadInfo: info)
 	}
 
-	// MARK: budget numbers (§5.9.3 Table 15, §5.9.7)
+	// MARK: budget numbers (§5.9.3 Table 19, §5.9.7)
 
 	@Test func randomModeBudgets() throws {
 		// 96-bit nonce, 2^-32 target ⇒ ~2^32 per epoch key; no per-segment cap.
@@ -54,7 +54,7 @@ struct UsageLimitsTests {
 		// budget is the write-once discipline itself: one encryption per segment,
 		// and the 2^r segment indices an epoch key covers.
 		let info = PayloadInfo(
-			aeadID: 0x0002, segmentMax: 16384, kdfID: 0x0001, snapID: 0x0001,
+			aeadID: 0x0002, segmentMax: 16384, kdfID: 0x0001, snapID: SnapID.none,
 			nonceMode: .derived, epochLength: 3,
 			salt: [UInt8](repeating: 0x04, count: 32))
 		let sched = try PayloadSchedule(
@@ -68,7 +68,7 @@ struct UsageLimitsTests {
 
 	@Test func writeOnceEncryptorRejectsRewrite() throws {
 		let info = PayloadInfo(
-			aeadID: 0x0002, segmentMax: 16384, kdfID: 0x0001, snapID: 0x0001,
+			aeadID: 0x0002, segmentMax: 16384, kdfID: 0x0001, snapID: SnapID.none,
 			nonceMode: .derived, epochLength: 1,
 			salt: [UInt8](repeating: 0x04, count: 32))
 		let sched = try PayloadSchedule(
@@ -166,8 +166,8 @@ struct UsageLimitsTests {
 	}
 
 	@Test func meteredOutputIsByteIdenticalToStatic() throws {
-		// Run an E.17.1-style derived encryption through the encryptor and the raw static.
-		let v = try Vectors.load("E17")
+		// Run an F.17.1-style derived encryption through the encryptor and the raw static.
+		let v = try Vectors.load("F17")
 		let sched = try Vectors.schedule(from: v)
 		let seg = (v["segments"] as! [[String: Any]])[0]
 		let pos = SegmentPosition(index: 0, isFinal: false)
