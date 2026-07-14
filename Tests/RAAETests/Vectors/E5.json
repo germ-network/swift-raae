@@ -1,6 +1,6 @@
 {
 	"name": "E.5 Single Segment, ChaCha20-Poly1305, HKDF-SHA-256, 16384",
-	"source": "draft-sullivan-cfrg-raae Appendix E.5 (2026-07-06 snapshot)",
+	"source": "draft-sullivan-cfrg-raae Appendix E.5 (2026-07-06 snapshot; commitment_hex resynced to the published -01 value, always-framed empty G)",
 	"protocol_id": "SEAL-RW-v1",
 	"cek_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	"payload_info": {
@@ -13,7 +13,7 @@
 		"salt_hex": "0404040404040404040404040404040404040404040404040404040404040404"
 	},
 	"schedule": {
-		"commitment_hex": "af73065c685ca117d6eeb34dcfa1293ff70592a46b2ebd036507773e4a5905e3",
+		"commitment_hex": "9ef7166bbce42787fd834f79d29f85b66a050b24f372ecfb79a66b3f2fdc1acb",
 		"payload_key_hex": "d0f1d392a371642db684a23858c0193c2d7406cb4360c81ef9190391cacf885f",
 		"acc_key_hex": "b156708dc559791d78014bae5e01b5fdf8a397c2d140fd9b9468e3cceeb8aa5d"
 	},

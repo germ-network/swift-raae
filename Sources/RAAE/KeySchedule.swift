@@ -22,13 +22,12 @@ public struct PayloadSchedule {
 	/// framed like any KDF field, so any length is accepted (over-large values hash
 	/// through `LH`).
 	///
-	/// - Note: an **empty** `G` is omitted from the commitment info rather than framed
-	///   as a zero-length element, keeping every schedule byte-compatible with the
-	///   vendored pre-G Appendix E corpus this package pins (`Spec/SOURCE.md`). The
-	///   published draft-01 instead frames the empty default explicitly, so its
-	///   regenerated commitment values differ **only when `G` is empty**; every
-	///   non-empty `G` derives byte-identically to draft-01 (pinned against its
-	///   Appendix E.2 in `GlobalAADTests`). See the convention note in `Spec/NOTES.md`.
+	/// - Note: `G` is **always** framed as the last element of the commitment info,
+	///   including the empty default (a zero-length element), per
+	///   draft-sullivan-cfrg-raae-01 ("always the last element of the commitment info
+	///   … so every commitment derivation includes it"). The vendored Appendix E corpus
+	///   carries the -01 commitment values this produces (`Spec/SOURCE.md`); the empty-G
+	///   pin is `GlobalAADTests`, and non-empty `G` is pinned against Appendix E.2 there.
 	public let globalAAD: [UInt8]
 	public let aead: AEAD
 	public let kdf: KeyDerivation
@@ -111,8 +110,8 @@ public struct PayloadSchedule {
 	///   are not key-committing on their own.
 	/// - Parameter globalAAD: the global associated data `G` (§4.2.4), bound into the
 	///   commitment as an extra framed element after `payload_info` (§4.5.1) — see
-	///   ``globalAAD``. Defaults to empty, which derives the same commitment as the
-	///   pre-G schedule (the element is omitted; see the property's convention note).
+	///   ``globalAAD``. Defaults to empty, which is still framed (as a zero-length
+	///   element) per draft-01; a wrong or missing `G` fails as `commitmentMismatch`.
 	/// - Parameter commitmentLength: defaults to the KDF's `Nh`; must be in
 	///   `[16, min(255·Nh, 0xFFFE)]`. Out-of-range values throw
 	///   ``ScheduleError/commitmentTooShort(_:)`` / ``ScheduleError/commitmentTooLong(_:)``.
@@ -170,9 +169,11 @@ public struct PayloadSchedule {
 
 		let info = payloadInfo.kdfInfoElements
 		// §4.5.1: G binds into the commitment only, as an extra framed element after
-		// payload_info — payload_key / acc_key / nonce_base never take it. An empty G
-		// is omitted, not framed (see the globalAAD convention note).
-		let commitInfo = globalAAD.isEmpty ? info : info + [globalAAD]
+		// payload_info — payload_key / acc_key / nonce_base never take it. G is always
+		// framed as the last commitment element (a zero-length element when empty), per
+		// draft-sullivan-cfrg-raae-01 ("always the last element of the commitment info
+		// … so every commitment derivation includes it").
+		let commitInfo = info + [globalAAD]
 		// commitment is a public authenticator (not secret) → derive(...) -> [UInt8].
 		self.commitment = kdf.derive(
 			protocolID: protocolID, label: Label.commit,

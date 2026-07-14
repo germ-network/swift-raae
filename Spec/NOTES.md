@@ -130,7 +130,11 @@ nonce_base  = KDF(protocol_id, "nonce_base",  [CEK], payload_info, Nn)          
 ```
 
 The draft prints a full KDF trace for the commitment; our Stage-1 KDF reproduces
-`prk` and `commitment` exactly, confirming framing + Extract/Expand are correct.
+`prk` exactly, confirming framing + Extract/Expand are correct. (The vendored
+snapshot's printed trace shows the *pre-G* commitment `020e115b…`; after the empty-G
+resync below the code derives the published `-01` value `47ea0ec7…` — the `commit`
+label's `info` gained the framed empty-G element, while `prk`, which is
+`info`-independent, is unchanged.)
 
 ### Global associated data G (§4.2.4, §4.5.1, §4.6)
 
@@ -141,18 +145,23 @@ only**, framed as the last element of the commit `info` — `payload_key` /
 re-supplies it, and a wrong or missing value fails as `commitmentMismatch`, exactly
 like a wrong CEK.
 
-> ⚠️ **Empty-G convention divergence.** The published `draft-…-raae-01`
-> (2026-07-06) frames the empty default as *one zero-length element in every
-> commitment* ("always the last element … one zero-length element, so every
-> commitment derivation includes it") and regenerated the vector corpus — its E.1
-> commitment is `47ea0ec7…`. The vendored corpus predates that regeneration (E.1
-> commitment `020e115b…`, no G element at all). We **omit an empty G** so the
-> vendored corpus keeps passing; the two conventions are byte-identical for every
-> **non-empty** G (the framed lists coincide), which `GlobalAADTests` pins against
-> the -01 Appendix E.2 value (`G="raae-demo-g"` → commitment `d8eedb1f…`).
-> Attachments always have a non-empty G (`object_id` must be non-empty), so interop
-> is unaffected there. On the next vector resync, switch to always-include and
-> update the vendored commitment values.
+> **Empty-G convention (aligned with `draft-…-raae-01`).** `G` is **always** the
+> last element of the commit `info`, including the empty default — draft-01 frames it
+> as "one zero-length element, so every commitment derivation includes it." The
+> vendored Appendix E corpus carries the -01 commitment values this produces (E.1
+> `47ea0ec7…`; the pre-G `020e115b…` is retired). `GlobalAADTests` pins the empty
+> default against -01 Appendix E.1 and non-empty G against Appendix E.2
+> (`G="raae-demo-g"` → `d8eedb1f…`). Only the commitment changed in the resync —
+> `payload_key` / `acc_key` / `nonce_base` and every ciphertext are byte-identical,
+> and every non-empty G was already byte-identical under the prior (empty-G-omitted)
+> convention, so the SEAL-attachment KATs (whose `G = object_id` is always non-empty)
+> are unaffected.
+>
+> ⚠️ The commitment is a stored, wire-visible value (e.g. the SEAL-attachment header
+> is `salt || commitment`), so this resync changes what empty-G objects verify
+> against. The `germ-network/mls-rs` companion must switch conventions in lockstep
+> for empty-G objects; non-empty-G objects (all SEAL-attachments) interoperate across
+> both conventions.
 
 ### Segment key via epoch key (§4.5.2)
 

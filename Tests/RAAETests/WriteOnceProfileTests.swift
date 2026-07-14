@@ -122,16 +122,19 @@ struct WriteOnceProfileTests {
 	}
 
 	/// KAT pinning the SEAL-RO-v1 schedule bytes (CEK 32×0xAA, salt 32×0x04,
-	/// AES-256-GCM, HKDF-SHA-256, derived mode, epoch_length 0). Expected values were
+	/// AES-256-GCM, HKDF-SHA-256, derived mode, epoch_length 0). The secret keys were
 	/// generated with an independent implementation of the draft's labeled-KDF
 	/// construction (§4.3/§4.5), itself verified byte-exact against Appendix E.1 —
 	/// this guards the profile-string plumbing: SEAL-RO-v1 derivations differ from
-	/// the vendored RW vectors only through `protocol_id`.
+	/// the vendored RW vectors only through `protocol_id`. The commitment reflects the
+	/// draft-sullivan-cfrg-raae-01 always-framed-empty-G convention (§4.5.1; the
+	/// independent generator predated it) — the secret keys never take `G`, so they are
+	/// unchanged by the resync.
 	@Test func writeOnceScheduleKAT() throws {
 		let schedule = try makeSchedule(protocolID: ProtocolID.immutable, aeadID: 0x0002)
 		#expect(
 			Hex.encode(schedule.commitment)
-				== "ae121244b130b77db3c832fd440ca989c96c5158aca6d70359a5b8af65a317a8"
+				== "71e7b3c7b33b73a45e77492c45cd3dccbe3eda769dbce5f3455d0ebc8bbe3004"
 		)
 		#expect(
 			keyHex(schedule.payloadKey)

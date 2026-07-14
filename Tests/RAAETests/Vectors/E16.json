@@ -1,6 +1,6 @@
 {
 	"name": "E.16.1 Two Segment, AES-256-GCM, HKDF-SHA-256, 65536 (Rewrite)",
-	"source": "draft-sullivan-cfrg-raae Appendix E.16.1 + E.20.1 (2026-07-06 snapshot)",
+	"source": "draft-sullivan-cfrg-raae Appendix E.16.1 + E.20.1 (2026-07-06 snapshot; commitment_hex resynced to the published -01 value, always-framed empty G)",
 	"protocol_id": "SEAL-RW-v1",
 	"cek_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	"payload_info": {
@@ -13,7 +13,7 @@
 		"salt_hex": "0404040404040404040404040404040404040404040404040404040404040404"
 	},
 	"schedule": {
-		"commitment_hex": "514edb9fb2a9867d33b4e3f55de93f8998118ce2697322c8943fd718a32ae874",
+		"commitment_hex": "9285553e10209c27bb5858b621426513b0832f26d7ee813d9dd62c218ce6972a",
 		"payload_key_hex": "bb78da70d5e99d36c78e8a8b1a79b620e4a4250dd6b471024c379917dfbb2de7",
 		"acc_key_hex": "953950ab75bdefd67ef15bbd7665b8afd3c9ced50ce7cb369e789606fc455025"
 	},
