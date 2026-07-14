@@ -26,15 +26,20 @@ public enum SuiteRegistry {
 		}
 	}
 
-	/// Whether a `snap_id` is a known Table-9 code point. There is no snapshot backend
+	/// Whether a `snap_id` is a supported code point. There is no snapshot backend
 	/// type to resolve — ``MaskedMultisetHash`` is the only authenticator — so unlike
 	/// ``aead(id:)``/``kdf(id:)`` this is a validity predicate rather than a factory.
+	/// draft-02 additionally defines `snap_id` 0x0002 (digest transcript) and 0x0003
+	/// (epoch digest tree); this build implements neither, so both are unknown here and
+	/// `PayloadSchedule.init` rejects them as `unsupportedSnapID`.
 	public static func isKnownSnapID(_ id: UInt16) -> Bool {
 		id == SnapID.none || id == SnapID.maskedMultisetHash
 	}
 }
 
-/// `snap_id` code points (draft Table 9).
+/// `snap_id` code points (draft-02 Table 12). Only the two implemented here are named;
+/// draft-02 also defines 0x0002 (digest transcript) and 0x0003 (epoch digest tree),
+/// which are unimplemented and rejected by ``SuiteRegistry/isKnownSnapID(_:)``.
 public enum SnapID {
 	/// No snapshot authenticator.
 	public static let none: UInt16 = 0x0000

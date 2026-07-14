@@ -5,7 +5,7 @@ import Testing
 
 /// End-to-end engine lifecycle per the spec's write/read paths (§4.9): StartEnc →
 /// EncSeg* → snapshot, then StartDec → SnapVerify → DecSeg*. The byte-exactness of
-/// every derivation the engine delegates to is pinned by the core's Appendix E
+/// every derivation the engine delegates to is pinned by the core's Appendix F
 /// vector suites; these tests cover the engine's own guarantees.
 @Suite("SEAL engine round trips")
 struct SEALRoundTripTests {

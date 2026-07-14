@@ -2,11 +2,11 @@ import Testing
 
 @testable import RAAE
 
-/// §4.6 global associated data `G`, pinned to Appendix E.2 of the vendored snapshot:
+/// §4.6 global associated data `G`, pinned to Appendix F.2 of the vendored snapshot:
 /// the commitment — and only the commitment — binds `G` as one framed element after
 /// `payload_info`. The empty default is itself committed (an empty final element), so
-/// the E.2 default case equals the E.1 commitment.
-@Suite("Global associated data commitment (E.2)")
+/// the F.2 default case equals the F.1 commitment.
+@Suite("Global associated data commitment (F.2)")
 struct GlobalAADCommitmentTests {
 	let info = PayloadInfo(
 		aeadID: 0x0002, segmentMax: 16384, kdfID: 0x0001, snapID: 0x0001,
@@ -14,8 +14,8 @@ struct GlobalAADCommitmentTests {
 		salt: [UInt8](repeating: 0x04, count: 32))
 	let cek = [UInt8](repeating: 0xAA, count: 32)
 
-	/// E.2 "G default (empty)": equals the E.1 commitment.
-	@Test func emptyGEqualsE1Commitment() throws {
+	/// F.2 "G default (empty)": equals the F.1 commitment.
+	@Test func emptyGEqualsF1Commitment() throws {
 		let dflt = try PayloadSchedule(
 			protocolID: ProtocolID.mutable, cek: cek, payloadInfo: info)
 		#expect(
@@ -28,8 +28,8 @@ struct GlobalAADCommitmentTests {
 		#expect(explicit.commitment == dflt.commitment)
 	}
 
-	/// E.2 `G = "raae-demo-g"` (11 octets, hex 726161652d64656d6f2d67).
-	@Test func nonEmptyGMatchesE2() throws {
+	/// F.2 `G = "raae-demo-g"` (11 octets, hex 726161652d64656d6f2d67).
+	@Test func nonEmptyGMatchesF2() throws {
 		let g = Array("raae-demo-g".utf8)
 		#expect(Hex.encode(g) == "726161652d64656d6f2d67")
 		let schedule = try PayloadSchedule(

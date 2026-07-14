@@ -24,9 +24,10 @@ named-instantiation presets.
 - `SEALUsageState` (§5.9.5 freeze/resume): `SealedObject` and the rewriter both
   expose the counters; hand them back to the next `resumeWriting` so budgets survive
   a freeze. Losing them means the object stays frozen.
-- `SEALScheme` presets from Table 15 (attachment / simple / memory / disk /
-  compact): each row fixes profile, `segment_max`, `nonce_mode` (overriding the
-  per-AEAD default — `SEAL-simple` is random-nonce even for the MRAE suite), and
-  epoch length; `SEAL-compact` requires an MRAE AEAD. The spec rows also bind a
+- `SEALScheme` presets from the named-instantiation table (simple / editable /
+  memory / disk / compact): each row fixes profile, `segment_max`, `nonce_mode`
+  (overriding the per-AEAD default — `SEAL-editable` is random-nonce even for the
+  MRAE suite), and epoch length; `SEAL-compact` requires an MRAE AEAD. The spec rows
+  also bind a
   serialization layout the engine does not ship, so these are documented as
   parameter presets, not claimable named instantiations.

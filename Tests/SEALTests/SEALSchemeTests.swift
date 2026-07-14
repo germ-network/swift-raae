@@ -3,15 +3,15 @@ import Testing
 
 @testable import SEAL
 
-/// §4.12 Table-15 named-instantiation parameter presets. The spec rows also bind a
+/// §4.12 named-instantiation parameter presets (Table 16 in draft-02). The rows bind a
 /// serialization layout, which the engine does not ship — covered by the doc caveat,
 /// asserted here only as parameters.
-@Suite("SEAL named-instantiation schemes (Table 15)")
+@Suite("SEAL named-instantiation schemes (Table 16)")
 struct SEALSchemeTests {
-	@Test func rowParametersMatchTable15() throws {
+	@Test func rowParametersMatchTable16() throws {
 		let rows: [(SEALScheme, SEALProfile, UInt32, PayloadInfo.NonceMode, UInt8)] = [
-			(.attachment, .readOnly, 65536, .derived, 32),
-			(.simple, .readWrite, 65536, .random, 16),
+			(.simple, .readOnly, 65536, .derived, 32),
+			(.editable, .readWrite, 65536, .random, 16),
 			(.memory, .readWrite, 16384, .random, 16),
 			(.disk, .readWrite, 16384, .random, 16),
 			(.compact, .readWrite, 16384, .derived, 16),
@@ -29,14 +29,14 @@ struct SEALSchemeTests {
 	}
 
 	@Test func rowNonceModeOverridesAEADDefault() throws {
-		// SEAL-simple fixes nonce_mode = random even for the MRAE suite, whose
+		// SEAL-editable fixes nonce_mode = random even for the MRAE suite, whose
 		// per-AEAD default would be derived.
-		let config = try SEALConfiguration(scheme: .simple, aeadID: 0x001F, kdfID: 0x0001)
+		let config = try SEALConfiguration(scheme: .editable, aeadID: 0x001F, kdfID: 0x0001)
 		#expect(config.nonceMode == .random)
 	}
 
 	@Test func flatKeyRuleFor256BitNonceSuites() {
-		// Table 15: a 256-bit-nonce suite (AEGIS) uses epoch_length 63 regardless of
+		// Table 16: a 256-bit-nonce suite (AEGIS) uses epoch_length 63 regardless of
 		// the row. No such suite is registered, so pin the rule via the helper the
 		// scheme init routes through.
 		for scheme in SEALScheme.allCases {
@@ -52,10 +52,10 @@ struct SEALSchemeTests {
 		_ = try SEALConfiguration(scheme: .compact, aeadID: 0x001F, kdfID: 0x0001)
 	}
 
-	@Test func attachmentSchemeRoundTrips() throws {
-		// The write-once attachment configuration end to end, via the preset.
+	@Test func simpleSchemeRoundTrips() throws {
+		// The write-once simple configuration end to end, via the preset.
 		let config = try SEALConfiguration(
-			scheme: .attachment, aeadID: 0x0002, kdfID: 0x0001)
+			scheme: .simple, aeadID: 0x0002, kdfID: 0x0001)
 		let cek = SEALConfiguration.generateCEK()
 		let writer = try config.startEncryption(cek: cek)
 		let segment = try writer.encrypt(
