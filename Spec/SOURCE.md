@@ -9,11 +9,17 @@ Authenticated Encryption".
 - **Transcription reference (vendored):** the `-latest` snapshot dated 2026-07-06,
   captured from <https://grittygrease.github.io/draft-sullivan-cfrg-raae/draft-sullivan-cfrg-raae.html>
   and stored at `Spec/draft-2026-07-06.html`. This snapshot is **byte-identical to
-  -02 for every feature this package implements** (verified section-by-section: the
-  KDF/framing §4.3, schedule/G §4.5, commitment §4.6, masked multiset hash §4.7.4,
-  and all vendored vector values). -02's additions are documented under "draft-02
-  resync" below; none is implemented here, so the vendored snapshot remains an
-  accurate transcription source.
+  -02 for the cryptographic core** (verified section-by-section: the KDF/framing
+  §4.3, schedule/G §4.5, commitment §4.6, masked multiset hash §4.7.4, and all
+  vendored vector values), so it remains the transcription source for those.
+  **Exception — §4.11 (serialization layouts) drifted** and the snapshot must not be
+  used for it: -02 renumbers the figures, adds the epoch-heads region and the
+  `LH(ct_i)` metadata field, and generalizes §4.11.4 from the `snap_id 0x0000` case
+  alone to 0x0000/0x0002/0x0003. The immutable container (§4.11.4) was therefore
+  implemented against **-02 directly** and pinned byte-exact by F.23; the layout it
+  ships is -02's `snap_id 0x0000` reduction, which is unchanged in substance from the
+  snapshot's text. Other -02 additions are documented under "draft-02 resync" below;
+  none is implemented here.
 - **Source repo:** https://github.com/grittygrease/draft-sullivan-cfrg-raae
 
 ## draft-02 resync
@@ -79,7 +85,7 @@ extracted (once, from the snapshot) into `Tests/RAAETests/Vectors/*.json`.
 The HTML snapshot is vendored at `Spec/draft-2026-07-06.html` (captured 2026-07-06,
 552 KB). Normative transcriptions in `NOTES.md` (KDF layer, profiles §4.10.2, named
 instantiations §4.12) are made against this snapshot, never against the living
-`-latest` URL.
+`-latest` URL — with the §4.11 exception noted above, where -02 is the source.
 
 ### Intra-day drift: the §4.6 `G` element
 

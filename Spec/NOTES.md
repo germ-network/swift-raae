@@ -150,6 +150,45 @@ snap_id follows the profile; `commitment_length = Nh`; fresh 32-octet salt per o
   parameterized construction — each named instantiation binds one, and the consuming
   protocol pins remaining byte-level details.
 
+### Reduced immutable linear layout (§4.11.4) — transcribed from draft-02
+
+> ⚠️ Transcribed from **draft-02 directly, not the vendored snapshot**: §4.11 is the
+> one section that drifted between them (see `SOURCE.md`). -02 generalizes §4.11.4
+> beyond `snap_id 0x0000`; only the 0x0000 case below is implemented.
+
+```
+object = salt(32) || commitment(commitment_length) || (ct_0||tag_0) || ... || (ct_{n-1}||tag_{n-1})
+```
+
+Under an immutable profile (`SEAL-RO-v1`, derived nonce) the stored fields of the
+general linear layout (§4.11.1, `salt || commitment || snapshot || segments`) drop
+out: nonces are recomputed from the schedule (`Np = 0`) and no snapshot authenticator
+runs at `snap_id 0x0000` (`Na = 0`).
+
+- **Nothing else is on the wire**: no magic number, no version, no segment count, no
+  length prefixes, no `is_final` octet, no `payload_info`. The reader's parameters
+  come from application context (our `SEALConfiguration`), and the commitment check
+  catches any mismatch. Version separation is cryptographic (`protocol_id` is a KDF
+  input).
+- **Boundaries are implicit and rest on a MUST**: "a linear layout that is to be read
+  as a stream MUST keep every non-final segment at the full `segment_max`, leaving
+  only the final segment short." So `objectByteCount` determines the segmentation:
+  with stride `B = segment_max + Nt` over the post-header remainder `R = k·B + r`,
+  `r = 0` ⇒ `k` segments (final full-length), `0 < r < Nt` ⇒ malformed, else `k+1`.
+- **`is_final` is bound in the derived nonce**, never stored, so the finality of the
+  last segment is proven only by decrypting it under `is_final = 1` — Appendix E:
+  "The reader MUST reject the object if segment n-1 did not open under is_final = 1."
+  That check *is* the truncation/extension defense under RO (§4.10.2); interior
+  segments authenticate individually but prove nothing about wholeness.
+- Pinned byte-exact by the F.23 `SEAL-simple` KAT (92 = 32 + 32 + 12 + 16) in both
+  directions — `SEALContainerTests` opens the vector's stored object and re-seals the
+  recovered plaintext under the vector's salt.
+- **Deviation, deliberate**: the spec permits `n_seg = 0`, but an empty object under
+  RO is indistinguishable from one whose segments were all deleted, so the container
+  always writes at least one (possibly empty) final segment and rejects zero-segment
+  objects on read (`SEALError.emptyImmutableObject`). Prefix parsing still accepts a
+  header with no segments yet — a partial download makes no completeness claim.
+
 ### Derived nonce (§4.5.3)
 
 `nonce(i) = nonce_base XOR ((i<<1)|is_final)`, where the value is encoded big-endian and

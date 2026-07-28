@@ -63,11 +63,14 @@ public final class SEALWriter {
 	private var finalIndex: UInt64?
 	private var finalized = false
 
+	/// `salt: nil` generates the per-object salt from the system CSPRNG. A caller-pinned
+	/// salt exists only for byte-exact vector tests and stays package-internal — a host
+	/// choosing salts would reintroduce the uniqueness obligation the engine removes.
 	init(
 		configuration: SEALConfiguration, cek: [UInt8], globalAssociatedData: [UInt8],
-		advantageLog2: Int
+		advantageLog2: Int, salt: [UInt8]? = nil
 	) throws {
-		let info = configuration.payloadInfo(salt: randomBytes(32))
+		let info = configuration.payloadInfo(salt: salt ?? randomBytes(32))
 		let schedule = try PayloadSchedule(
 			protocolID: configuration.profile.protocolID, cek: cek,
 			payloadInfo: info, globalAssociatedData: globalAssociatedData)
