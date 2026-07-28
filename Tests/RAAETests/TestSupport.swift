@@ -53,7 +53,7 @@ enum Vectors {
 		)
 	}
 
-	/// Build the `PayloadSchedule` for a vector (always `SEAL-RW-v1` in Appendix E).
+	/// Build the `PayloadSchedule` for a vector (always `SEAL-RW-v1` in Appendix F).
 	static func schedule(from v: [String: Any]) throws -> PayloadSchedule {
 		try PayloadSchedule(
 			protocolID: ProtocolID.mutable,

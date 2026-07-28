@@ -5,11 +5,11 @@ import Testing
 /// M2 — verify-before-decrypt as the default safe path (§4.6, §4.9.1.2).
 @Suite("Commitment verification + startDecrypt")
 struct CommitmentVerifyTests {
-	/// E.1 inputs (public-surface): CEK, payload_info, published commitment, segment 0.
+	/// F.1 inputs (public-surface): CEK, payload_info, published commitment, segment 0.
 	func e1() throws -> (
 		cek: [UInt8], info: PayloadInfo, commitment: [UInt8], seg: [String: Any]
 	) {
-		let v = try Vectors.load("E1")
+		let v = try Vectors.load("F1")
 		let pi = v["payload_info"] as! [String: Any]
 		let info = PayloadInfo(
 			aeadID: UInt16(pi["aead_id"] as! Int),
@@ -34,7 +34,7 @@ struct CommitmentVerifyTests {
 			protocolID: ProtocolID.mutable, cek: cek, payloadInfo: info,
 			publishedCommitment: commitment)
 		#expect(schedule.commitment == commitment)
-		// The safe path yields a usable schedule: E.1 segment 0 decrypts.
+		// The safe path yields a usable schedule: F.1 segment 0 decrypts.
 		let ctTag =
 			Hex.decode(seg["ciphertext_hex"] as! String)
 			+ Hex.decode(seg["tag_hex"] as! String)

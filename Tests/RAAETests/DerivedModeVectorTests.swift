@@ -3,17 +3,17 @@ import Testing
 
 @testable import RAAE
 
-/// Byte-exact derived-nonce mode via AES-256-GCM-SIV, pinned to Appendix E.17.1.
+/// Byte-exact derived-nonce mode via AES-256-GCM-SIV, pinned to Appendix F.17.1.
 /// GCM-SIV is deterministic, so re-encryption reproduces the vector ciphertext exactly.
-@Suite("Derived mode + AES-256-GCM-SIV vs E.17.1")
+@Suite("Derived mode + AES-256-GCM-SIV vs F.17.1")
 struct DerivedModeVectorTests {
-	func loadE17() throws -> (PayloadSchedule, [String: Any]) {
-		let v = try Vectors.load("E17")
+	func loadF17() throws -> (PayloadSchedule, [String: Any]) {
+		let v = try Vectors.load("F17")
 		return (try Vectors.schedule(from: v), v)
 	}
 
 	@Test func scheduleAndNonceBaseMatch() throws {
-		let (schedule, v) = try loadE17()
+		let (schedule, v) = try loadF17()
 		#expect(schedule.aead.id == 0x001F)
 		let s = v["schedule"] as! [String: Any]
 		#expect(Hex.encode(schedule.commitment) == s["commitment_hex"] as! String)
@@ -24,7 +24,7 @@ struct DerivedModeVectorTests {
 	}
 
 	@Test func segmentKeysAndDerivedNoncesMatch() throws {
-		let (schedule, v) = try loadE17()
+		let (schedule, v) = try loadF17()
 		for seg in v["segments"] as! [[String: Any]] {
 			let index = UInt64(seg["index"] as! Int)
 			let pos = SegmentPosition(
@@ -40,7 +40,7 @@ struct DerivedModeVectorTests {
 	}
 
 	@Test func segmentsDecryptAndReencryptExactly() throws {
-		let (schedule, v) = try loadE17()
+		let (schedule, v) = try loadF17()
 		for seg in v["segments"] as! [[String: Any]] {
 			let pos = SegmentPosition(
 				index: UInt64(seg["index"] as! Int),
@@ -58,7 +58,7 @@ struct DerivedModeVectorTests {
 	}
 
 	@Test func snapshotAndDerivedRewriteMatch() throws {
-		let (schedule, v) = try loadE17()
+		let (schedule, v) = try loadF17()
 		let hash = MaskedMultisetHash(schedule: schedule)
 		let segs = (v["segments"] as! [[String: Any]]).map {
 			(

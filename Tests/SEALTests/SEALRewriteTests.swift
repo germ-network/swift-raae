@@ -8,13 +8,13 @@ import Testing
 /// budgets continued from the persisted ``SEALUsageState``.
 @Suite("SEAL rewriter")
 struct SEALRewriteTests {
-	/// Byte-exact engine KAT against Appendix E.17.1 (AES-256-GCM-SIV, derived,
+	/// Byte-exact engine KAT against Appendix F.17.1 (AES-256-GCM-SIV, derived,
 	/// 65536): GCM-SIV is deterministic, so the engine rewrite of segment 0 with the
 	/// vector's replacement plaintext must reproduce the vector's replacement
 	/// `ct||tag` and new snapshot exactly — pinning the resume-verify path, the
 	/// unmask-based accumulator recovery, and the O(1) rewrite update end to end.
-	@Test func rewriteMatchesE17Vector() throws {
-		let v = try Vectors.load("E17")
+	@Test func rewriteMatchesF17Vector() throws {
+		let v = try Vectors.load("F17")
 		let config = try SEALConfiguration(
 			profile: .readWrite, aeadID: 0x001F, kdfID: 0x0001, segmentMax: 65536,
 			epochLength: 0)
@@ -66,11 +66,11 @@ struct SEALRewriteTests {
 		#expect(rewriter.usageState.segmentWrites[0] == 3)
 	}
 
-	/// The random-mode path over real vector state (E.16.1): resume verifies, the
+	/// The random-mode path over real vector state (F.16.1): resume verifies, the
 	/// rewrite round-trips under a fresh nonce, the old snapshot dies, and stale
 	/// segment copies are rejected.
-	@Test func randomModeRewriteLifecycleOverE16Vector() throws {
-		let v = try Vectors.load("E16")
+	@Test func randomModeRewriteLifecycleOverF16Vector() throws {
+		let v = try Vectors.load("F16")
 		let config = try SEALConfiguration(
 			profile: .readWrite, aeadID: 0x0002, kdfID: 0x0001, segmentMax: 65536,
 			epochLength: 1)

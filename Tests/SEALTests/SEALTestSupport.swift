@@ -23,7 +23,7 @@ enum Hex {
 }
 
 /// Decodes a vector JSON resource bundled with the test target (copies of the core's
-/// vendored Appendix E extracts).
+/// vendored Appendix F extracts).
 enum Vectors {
 	static func load(_ name: String) throws -> [String: Any] {
 		let url = Bundle.module.url(

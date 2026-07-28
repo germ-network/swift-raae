@@ -83,16 +83,16 @@ swift test
 | 4 | AES-256-GCM-SIV (MRAE); AEGIS/TurboSHAKE deferred | ✅ |
 | 5 | Public engine API, DocC, property tests, 0.0.1 | ✅ |
 | SEAL A–B | Two-product split; SEAL configuration + writer/reader lifecycle | ✅ |
-| SEAL C | RW rewriter (RewriteSeg + snapshot rebind, E.17.1-pinned); §4.12 scheme presets | ✅ |
+| SEAL C | RW rewriter (RewriteSeg + snapshot rebind, F.17.1-pinned); §4.12 scheme presets | ✅ |
 | SEAL D | Serialization layouts, hedged nonces | planned |
 
 Suite coverage: **AEAD** AES-128/256-GCM, ChaCha20-Poly1305, AES-256-GCM-SIV; **KDF**
 HKDF-SHA-256/384/512. AEGIS and TurboSHAKE are documented future work
 ([`Spec/STAGE4-FEASIBILITY.md`](Spec/STAGE4-FEASIBILITY.md)).
 
-Every cryptographic stage is validated **byte-exact** against the draft's Appendix E
-test vectors (vendored under `Tests/RAAETests/Vectors/`): E.1, E.5, E.9, E.16.1, E.17.1,
-and the E.20.1 negative case.
+Every cryptographic stage is validated **byte-exact** against the draft's Appendix F
+test vectors (vendored under `Tests/RAAETests/Vectors/`): F.1, F.5, F.9, F.16.1, F.17.1,
+the F.22.1 negative case, and the F.23 `SEAL-simple` end-to-end KAT.
 
 ## Contributing and Collaboration
 

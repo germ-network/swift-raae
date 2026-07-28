@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-/// The engine tests carry copies of two core-vendored Appendix E vectors (SwiftPM
+/// The engine tests carry copies of two core-vendored Appendix F vectors (SwiftPM
 /// resources cannot be shared across test targets). A draft resync must update both
 /// copies; this guard fails the build the moment they drift.
 @Suite("Vector copy sync")
@@ -14,7 +14,7 @@ struct VectorSyncTests {
 			sealTestsDir
 			.deletingLastPathComponent()  // Tests/
 			.deletingLastPathComponent()  // repo root
-		for name in ["E16", "E17"] {
+		for name in ["F16", "F17"] {
 			let original = try Data(
 				contentsOf: repoRoot.appendingPathComponent(
 					"Tests/RAAETests/Vectors/\(name).json"))
