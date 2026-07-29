@@ -66,10 +66,18 @@ The engine authenticates what it is given; a few properties only the host can su
 - **Know when content is expected.** Under `SEAL-RO-v1` no snapshot runs, so
   truncation-to-empty is indistinguishable from a legitimately empty object
   (§4.11.1); whole-object integrity needs `SEAL-RW-v1` or a layer above.
-- **Own serialization.** The engine deals in values (``SealedObjectHeader``,
-  ``SealedSegment``, snapshot bytes); placement is the consuming protocol's job
-  (§2.1). The §4.11 layouts are informative patterns, and a §4.12 named
-  instantiation is only claimable together with its bound layout.
+- **Own serialization, or use the immutable container.** The engine deals in values
+  (``SealedObjectHeader``, ``SealedSegment``, snapshot bytes) and placement is the
+  consuming protocol's job (§2.1). One layout ships: the reduced immutable linear
+  form (§4.11.4) via ``SEALConfiguration/seal(_:cek:globalAssociatedData:)`` and
+  ``SEALConfiguration/open(_:cek:globalAssociatedData:)``, which makes
+  ``SEALScheme/simple`` a complete `SEAL-simple` instantiation. Other §4.12 rows are
+  only claimable together with their bound layout.
+- **Under the immutable container, completeness is the final segment.** Interior
+  segments authenticate individually; only opening the last one with `is_final = 1`
+  proves the object is whole (§4.10.2). ``SEALLinearGeometry`` and
+  ``SEALLinearPrefix`` exist so a host can fetch and verify partially without losing
+  that rule.
 
 ## Topics
 
@@ -97,6 +105,11 @@ The engine authenticates what it is given; a few properties only the host can su
 
 - ``SealedObjectHeader``
 - ``SealedSegment``
+
+### Immutable container (§4.11.4)
+
+- ``SEALLinearGeometry``
+- ``SEALLinearPrefix``
 
 ### Errors
 

@@ -64,6 +64,34 @@ try reader.verifySnapshot(object.snapshot!, segments: [segment])
 let back = try reader.decrypt(segment)
 ```
 
+For write-once content there is a one-call container — the reduced immutable linear
+layout (§4.11.4), which together with the `.simple` preset is the spec's
+`SEAL-simple(aead_id, kdf_id)` named instantiation:
+
+```swift
+let config = try SEALConfiguration(scheme: .simple, aeadID: 0x0002, kdfID: 0x0001)
+let cek = Data(SEALConfiguration.generateCEK())
+
+let object = try config.seal(payload, cek: cek)   // salt ‖ commitment ‖ segments
+let back = try config.open(object, cek: cek)      // commitment checked before any segment
+```
+
+Large objects need not be held whole. Geometry comes from the byte count alone, so a
+client can fetch and open one segment at a time — and resume an interrupted download:
+
+```swift
+let geometry = try config.linearGeometry(objectByteCount: contentLength)
+let index = geometry.segmentIndex(containingPlaintextOffset: 5_000)!
+let bytes = try await fetch(range: geometry.byteRange(ofSegment: index)!)
+
+let reader = try config.startDecryption(cek: cek, headerBlock: headerBytes)
+let chunk = try reader.decrypt(block: bytes, at: geometry.position(ofSegment: index)!)
+```
+
+Under the immutable profile no snapshot runs, so completeness rests on the final
+segment opening with `is_final = 1` — see `SEALLinearPrefix` for the progressive-read
+rules.
+
 ## Building
 
 ```sh
@@ -84,7 +112,8 @@ swift test
 | 5 | Public engine API, DocC, property tests, 0.0.1 | ✅ |
 | SEAL A–B | Two-product split; SEAL configuration + writer/reader lifecycle | ✅ |
 | SEAL C | RW rewriter (RewriteSeg + snapshot rebind, F.17.1-pinned); §4.12 scheme presets | ✅ |
-| SEAL D | Serialization layouts, hedged nonces | planned |
+| SEAL D3 | Immutable linear container (§4.11.4), F.23-pinned; `SEAL-simple` claimable | ✅ |
+| SEAL D1/D2/D4–D6 | Hedged + plaintext-bound nonces, extend/truncate, digest overloads | planned |
 
 Suite coverage: **AEAD** AES-128/256-GCM, ChaCha20-Poly1305, AES-256-GCM-SIV; **KDF**
 HKDF-SHA-256/384/512. AEGIS and TurboSHAKE are documented future work

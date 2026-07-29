@@ -237,10 +237,15 @@ what activates it (§6). Nothing in Stage D is required work.
   the fresh-CSPRNG draw in random mode (`pt_hash`/`pt-nonce` labels, Table 24),
   defending RNG state duplication (VM snapshots, fork). Wire format unchanged;
   decryption unaffected. Pin against the E.19 component vectors.
-- **D3 — Linear-layout container (§4.11.1, reduced immutable form §4.11.4).** A
-  single-`Data` seal/open convenience over the engine values. Prerequisite for
-  claiming any §4.12 named instantiation, since each row binds a layout; until then
-  `SEALScheme` remains a parameter preset.
+- **D3 — Linear-layout container (reduced immutable form §4.11.4). ✅ Shipped.**
+  `seal`/`open` over `Data`, plus the pieces a host needs to avoid holding whole
+  objects: `SealedObjectHeader.encoded`/`parseHeader` (header block),
+  `SEALLinearGeometry` (byte↔segment map from a byte count alone, including raw
+  plaintext-offset addressing), `SEALLinearPrefix`/`parsePrefix` (interrupted
+  downloads), and `SEALReader.decrypt(block:at:)` (random access). Pinned byte-exact
+  against F.23 in both directions. This makes `.simple` + the container a complete
+  `SEAL-simple` named instantiation; the other §4.12 rows stay parameter presets
+  because their layouts (aligned, split) and RW linear are still unshipped.
 - **D4 — Extend/truncate (Table 13 RW mutability).** The rewriter covers rewrite
   only; extend appends indices (n_seg grows, snapshot rebinds, finality moves) and
   truncate removes a tail. Both need the finality-shape rules re-derived from the

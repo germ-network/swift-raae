@@ -46,6 +46,21 @@ public enum SEALError: Error, Equatable {
 	/// The §5.9.7.4 per-segment (hot-rewrite) budget would be exceeded. Always a
 	/// hard stop.
 	case segmentBudgetExceeded(index: UInt64, limitLog2: Int)
+	/// A reduced immutable linear layout operation (§4.11.4) on a `SEAL-RW-v1`
+	/// configuration. The reduction assumes `Np = 0` and `Na = 0`, which only the
+	/// immutable profile guarantees, so the stride math does not apply.
+	case immutableLayoutRequiresReadOnlyProfile
+	/// Fewer bytes than the fixed `salt || commitment` header block.
+	case truncatedHeaderBlock(byteCount: Int, required: Int)
+	/// Trailing bytes after the last whole segment block are too few to be a segment
+	/// (shorter than the AEAD tag), so the object's segmentation is unrecoverable.
+	case malformedSegmentation(trailingByteCount: Int)
+	/// A stored object carrying a header but no segments. The spec permits `n_seg = 0`,
+	/// but under `SEAL-RO-v1` there is no snapshot, so an empty object is
+	/// indistinguishable from one whose segments were all deleted — this engine
+	/// therefore always writes at least one (possibly empty) final segment and rejects
+	/// zero-segment objects on read.
+	case emptyImmutableObject
 }
 
 /// Parameter presets from the spec's named-instantiation table (§4.12; Table 16 in
@@ -55,9 +70,11 @@ public enum SEALError: Error, Equatable {
 ///
 /// > Important: every spec instantiation also **binds a serialization layout**
 /// > (§4.11: linear for simple/editable, aligned for memory/compact, split for
-/// > disk), which this engine does not ship — these presets are the instantiations'
-/// > *parameter sets*. A host claiming a named instantiation on the wire must also
-/// > implement its bound layout.
+/// > disk). This package ships one — the reduced immutable linear layout (§4.11.4),
+/// > via ``SEALConfiguration/seal(_:cek:globalAssociatedData:)`` — so ``simple``
+/// > together with that container is a complete `SEAL-simple(aead_id, kdf_id)`.
+/// > The other rows remain *parameter sets*: a host claiming one on the wire must
+/// > also implement its bound layout.
 ///
 /// > Note: draft-02 renamed the write-once instantiation `SEAL-attachment` →
 /// > `SEAL-simple` and the mutable 65536 one `SEAL-simple` → `SEAL-editable`, and
@@ -65,7 +82,9 @@ public enum SEALError: Error, Equatable {
 /// > engine does not implement. These cases use the draft-02 names.
 public enum SEALScheme: CaseIterable, Equatable, Sendable {
 	/// `SEAL-simple`: write-once content read whole. `SEAL-RO-v1`, 65536,
-	/// derived nonce, epoch_length 32. (Named `SEAL-attachment` in draft-01.)
+	/// derived nonce, epoch_length 32, linear layout in its reduced immutable form
+	/// (§4.11.4 — shipped here, see ``SEALConfiguration/seal(_:cek:globalAssociatedData:)``).
+	/// (Named `SEAL-attachment` in draft-01.)
 	case simple
 	/// `SEAL-editable`: the basic mutable object. `SEAL-RW-v1`, 65536, random nonce,
 	/// epoch_length 16. (Named `SEAL-simple` in draft-01.)
