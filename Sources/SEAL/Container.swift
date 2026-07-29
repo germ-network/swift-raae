@@ -340,6 +340,8 @@ extension SEALConfiguration {
 			globalAssociatedData: globalAssociatedData)
 		var plaintext = Data()
 		for index in 0..<geometry.segmentCount {
+			// Unreachable: index < segmentCount by loop construction. Thrown rather
+			// than trapped to keep this parser free of panic paths.
 			guard let range = geometry.byteRange(ofSegment: index),
 				let position = geometry.position(ofSegment: index)
 			else { throw SEALError.malformedSegmentation(trailingByteCount: 0) }

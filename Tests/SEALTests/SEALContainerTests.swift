@@ -213,6 +213,21 @@ struct SEALContainerTests {
 		}
 	}
 
+	/// A client that try-finals a torn tail hands over fewer bytes than a tag. That is
+	/// attacker-reachable (a truncated fetch), so it must be a typed error, never a trap.
+	@Test(arguments: [0, 1, 15])
+	func blocksShorterThanATagAreRejected(_ length: Int) throws {
+		let cek = Data(SEALConfiguration.generateCEK())
+		let object = try small.seal(payload(100), cek: cek)
+		let reader = try small.startDecryption(cek: cek, headerBlock: object)
+
+		#expect(throws: AEADError.self) {
+			_ = try reader.decrypt(
+				block: Data(repeating: 0, count: length),
+				at: SegmentPosition(index: 0, isFinal: true))
+		}
+	}
+
 	@Test func fullLengthFinalSegmentIsFinalOnlyUnderIsFinal() throws {
 		// An exact multiple of segment_max: the last block is full-width *and* final.
 		let cek = Data(SEALConfiguration.generateCEK())
