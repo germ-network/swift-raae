@@ -14,7 +14,11 @@ let package = Package(
 		.library(name: "SEAL", targets: ["SEAL"]),
 	],
 	dependencies: [
-		.package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0")
+		// 3.x and 4.x both work: this package uses only SymmetricKey, HKDF,
+		// AES.GCM, ChaChaPoly and _CryptoExtras' AES-GCM-SIV, none of which
+		// changed across the major bump. Capping at 4 kept adopters already on
+		// swift-crypto 4 from resolving at all.
+		.package(url: "https://github.com/apple/swift-crypto.git", "3.0.0"..<"5.0.0")
 	],
 	targets: [
 		.target(
