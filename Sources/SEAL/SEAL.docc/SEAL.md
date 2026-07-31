@@ -78,6 +78,12 @@ The engine authenticates what it is given; a few properties only the host can su
   proves the object is whole (§4.10.2). ``SEALLinearGeometry`` and
   ``SEALLinearPrefix`` exist so a host can fetch and verify partially without losing
   that rule.
+- **Record the suite, or let ``SEALEnvelope`` record it.** A stored object carries
+  none: `kdf_id` fixes `Nh` and so the header width, so a reader needs the suite
+  before it can locate the first segment, and a mismatch reports only a commitment
+  failure (§6.3). Either pin the suite in the host's own container or wrap the object
+  in an envelope, which prefixes it with the parameters and leaves the §4.11.4 bytes
+  untouched.
 
 ## Topics
 
@@ -110,6 +116,10 @@ The engine authenticates what it is given; a few properties only the host can su
 
 - ``SEALLinearGeometry``
 - ``SEALLinearPrefix``
+
+### Self-describing envelope
+
+- ``SEALEnvelope``
 
 ### Errors
 
