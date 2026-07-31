@@ -219,6 +219,11 @@ public struct SEALLinearPrefix: Equatable, Sendable {
 	public let tail: Data
 	/// Byte offset to resume the fetch from — the start of the first incomplete block,
 	/// so ``tail`` is re-fetched rather than stitched.
+	///
+	/// Addresses whatever was handed to the parser: the object under
+	/// ``SEALConfiguration/parsePrefix(_:)``, the whole blob under
+	/// ``SEALEnvelope/parsePrefix(_:)``. Either way it is the offset to resume *that*
+	/// fetch from.
 	public let resumeOffset: Int
 }
 
@@ -234,6 +239,13 @@ extension SEALConfiguration {
 	///   scale; a host streaming very large objects should fetch by
 	///   ``SEALLinearGeometry/byteRange(ofSegment:)`` instead.
 	public func parsePrefix(_ bytes: Data) throws -> SEALLinearPrefix {
+		try parsePrefix(bytes, baseOffset: 0)
+	}
+
+	/// Envelope seam: `baseOffset` is where `bytes` begins within the stored blob, so
+	/// ``SEALLinearPrefix/resumeOffset`` comes back addressing the blob rather than the
+	/// object. It shifts nothing else — blocks and tail are values, not positions.
+	func parsePrefix(_ bytes: Data, baseOffset: Int) throws -> SEALLinearPrefix {
 		try requireImmutableProfile()
 		let header = try parseHeader(bytes)
 		let stride = segmentBlockByteCount
@@ -252,7 +264,7 @@ extension SEALConfiguration {
 			blocks: blocks,
 			knownInteriorCount: tail.isEmpty ? max(blocks.count - 1, 0) : blocks.count,
 			tail: tail,
-			resumeOffset: consumed)
+			resumeOffset: baseOffset + consumed)
 	}
 
 	/// ``parsePrefix(_:)`` and ``startDecryption(cek:headerBlock:globalAssociatedData:)``

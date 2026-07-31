@@ -288,6 +288,89 @@ struct SEALEnvelopeTests {
 
 	// MARK: Slice safety
 
+	// MARK: Partial fetches
+
+	@Test func prefixResumeOffsetAddressesTheBlob() throws {
+		let cek = Data(SEALConfiguration.generateCEK())
+		let envelope = try small.sealEnvelope(payload(40960), cek: cek)  // 3 segments
+		let parsed = try SEALEnvelope.parse(envelope)
+		let base = parsed.objectOffset
+		let stride = small.segmentBlockByteCount
+		let headerEnd = base + small.headerByteCount
+
+		// Prefix octets are not object bytes: every reported offset clears them.
+		let atHeader = try parsed.parsePrefix(envelope.prefix(headerEnd))
+		#expect(atHeader.blocks.isEmpty)
+		#expect(atHeader.resumeOffset == headerEnd)
+
+		let torn = try parsed.parsePrefix(envelope.prefix(headerEnd + stride + 100))
+		#expect(torn.blocks.count == 1)
+		#expect(torn.tail.count == 100)
+		#expect(torn.knownInteriorCount == 1)
+		#expect(torn.resumeOffset == headerEnd + stride)
+
+		// The last whole block stays ambiguous — it may be a full-length final segment.
+		let onBoundary = try parsed.parsePrefix(envelope.prefix(headerEnd + 2 * stride))
+		#expect(onBoundary.blocks.count == 2)
+		#expect(onBoundary.knownInteriorCount == 1)
+
+		// Object-relative parsing of the same cut agrees on every value and differs by
+		// exactly the prefix width on the offset — which is the whole point.
+		let sameCut = try small.parsePrefix(
+			envelope.dropFirst(base).prefix(small.headerByteCount + stride + 100))
+		#expect(sameCut.blocks == torn.blocks)
+		#expect(sameCut.tail == torn.tail)
+		#expect(sameCut.knownInteriorCount == torn.knownInteriorCount)
+		#expect(sameCut.resumeOffset == torn.resumeOffset - base)
+
+		#expect(
+			throws: SEALError.truncatedEnvelope(
+				byteCount: base - 1, required: base)
+		) {
+			_ = try parsed.parsePrefix(envelope.prefix(base - 1))
+		}
+	}
+
+	@Test func interruptedEnvelopeFetchResumesAndCompletes() throws {
+		let cek = Data(SEALConfiguration.generateCEK())
+		let original = payload(40960)
+		let envelope = try small.sealEnvelope(original, cek: cek)
+		let stride = small.segmentBlockByteCount
+
+		// First chunk: the suite comes off the wire, no configuration in hand.
+		let partial = envelope.prefix(SEALEnvelope.prefixByteCount + 64 + stride + 500)
+		let (parsed, reader) = try SEALEnvelope.startDecryption(
+			cek: cek, envelopeBytes: partial)
+		let prefix = try parsed.parsePrefix(partial)
+
+		var recovered = Data()
+		for k in 0..<prefix.knownInteriorCount {
+			recovered += try reader.decrypt(
+				block: prefix.blocks[k],
+				at: SegmentPosition(index: UInt64(k), isFinal: false))
+		}
+		#expect(recovered == original.prefix(16384))
+
+		// Resume the *blob* fetch at the reported offset and stitch: byte-identical to
+		// the original envelope. This is the assertion an object-relative offset fails.
+		let resumed =
+			partial.prefix(prefix.resumeOffset)
+			+ envelope.dropFirst(prefix.resumeOffset)
+		#expect(Data(resumed) == envelope)
+
+		// Transfer complete: the trailing candidate opens under is_final = 1.
+		let done = try parsed.parsePrefix(envelope)
+		for k in prefix.knownInteriorCount..<done.knownInteriorCount {
+			recovered += try reader.decrypt(
+				block: done.blocks[k],
+				at: SegmentPosition(index: UInt64(k), isFinal: false))
+		}
+		recovered += try reader.decrypt(
+			block: done.tail,
+			at: SegmentPosition(index: UInt64(done.blocks.count), isFinal: true))
+		#expect(recovered == original)
+	}
+
 	@Test func acceptsNonZeroBasedSlices() throws {
 		let cek = Data(SEALConfiguration.generateCEK())
 		let original = payload(100)

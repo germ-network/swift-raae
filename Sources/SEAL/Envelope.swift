@@ -40,6 +40,15 @@ import RAAE
 /// and the suite is largely inferable from object length and context regardless, but
 /// the envelope makes it explicit rather than implicit.
 ///
+/// Values derived from a parsed prefix — everything ``geometry(envelopeByteCount:)`` and
+/// ``parsePrefix(_:)`` return — describe what the bytes *claim*, and claim nothing until
+/// ``startDecryption(cek:envelopeBytes:globalAssociatedData:)`` checks the commitment. A
+/// caller sizing a buffer from ``SEALLinearGeometry/plaintextByteCount`` before that
+/// check is sizing it from attacker-influenced input. The allowlist bounds the damage —
+/// `segment_max` is one of two values, so the figure cannot be inflated more than
+/// fourfold, and every block still has to authenticate — but the ordering is worth
+/// keeping straight.
+///
 /// ## Scope
 ///
 /// Read-only in v1: the wrapped layout is the immutable one, and the profile octet is
@@ -200,6 +209,25 @@ extension SEALEnvelope {
 		}
 		return try configuration.linearGeometry(
 			objectByteCount: envelopeByteCount - objectOffset, baseOffset: objectOffset)
+	}
+
+	/// Parse however much of an envelope has arrived — the interrupted-download entry
+	/// point, and the natural pairing for this format: the prefix lands in the first
+	/// ``prefixByteCount`` octets, so the suite is known from the opening chunk without
+	/// any out-of-band configuration.
+	///
+	/// ``SEALLinearPrefix/resumeOffset`` addresses the stored blob, so it can be issued
+	/// as the next range request unmodified. The reading rules are unchanged — see
+	/// ``SEALLinearPrefix``, in particular that the last whole block stays ambiguous
+	/// until more bytes arrive or the transfer ends.
+	public func parsePrefix(_ envelopeBytes: Data) throws -> SEALLinearPrefix {
+		guard envelopeBytes.count >= objectOffset else {
+			throw SEALError.truncatedEnvelope(
+				byteCount: envelopeBytes.count, required: objectOffset)
+		}
+		let start = envelopeBytes.startIndex + objectOffset
+		return try configuration.parsePrefix(
+			envelopeBytes[start...], baseOffset: objectOffset)
 	}
 
 	/// Verify the commitment and return a reader, given the head of an envelope: the

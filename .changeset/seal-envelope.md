@@ -15,9 +15,11 @@ A bare object carries no suite descriptor, and `kdf_id` fixes `Nh` and so the he
 width — a reader must already know the suite to locate the first segment, and a
 parameter mismatch reports only a commitment failure without naming the field (§6.3).
 `SEALConfiguration.sealEnvelope(_:cek:globalAssociatedData:)` and the static
-`SEALEnvelope.parse`/`open`/`startDecryption` close that gap; `SEALEnvelope.geometry(envelopeByteCount:)`
-returns a `SEALLinearGeometry` whose byte ranges address the envelope, so range fetches
-work unchanged.
+`SEALEnvelope.parse`/`open`/`startDecryption` close that gap. `SEALEnvelope.geometry(envelopeByteCount:)`
+and `SEALEnvelope.parsePrefix(_:)` return byte offsets addressing the envelope, so range
+requests and interrupted-download resumes work against the stored blob unmodified — the
+natural pairing for this format, since the prefix arrives in the opening chunk and names
+the suite before any configuration exists.
 
 This framing is ours, not the draft's — §4.11 delegates the layer to the consuming
 protocol — and it is additive: dropping `objectOffset` octets leaves the §4.11.4 object
