@@ -46,9 +46,10 @@ import RAAE
 /// reserved so a future read-write layout — which needs stored nonces and a snapshot,
 /// a different geometry — can claim `0x01`.
 public struct SEALEnvelope: Sendable {
-	/// ASCII `"SEA1"`. A bare object opens with a random salt, so without a magic
-	/// number roughly one in 256 of them would present a plausible version octet and
-	/// misparse; four octets make the discrimination deterministic for a host holding
+	/// ASCII `"SEA1"`. A bare object opens with a random salt, so without a magic number
+	/// the allowlist alone would be separating the two formats probabilistically — every
+	/// field would have to land outside its accepted set for a bare object to be
+	/// rejected. Four octets make the discrimination deterministic for a host holding
 	/// both enveloped and bare blobs.
 	public static let magic: [UInt8] = Array("SEA1".utf8)
 	public static let currentVersion: UInt8 = 0x01
