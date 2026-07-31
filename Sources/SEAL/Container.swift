@@ -84,8 +84,13 @@ extension SEALConfiguration {
 public struct SEALLinearGeometry: Equatable, Sendable {
 	/// `n_seg`, at least 1 (a zero-segment object is rejected at construction).
 	public let segmentCount: UInt64
+	/// The object's own size, excluding any wrapper prefix ahead of it.
 	public let objectByteCount: Int
-	/// Where segment 0's block starts: `32 + commitment_length`.
+	/// Where the object begins within the stored blob: `0` for a bare object, and the
+	/// prefix width when the object is wrapped (see ``SEALEnvelope``). ``byteRange(ofSegment:)``
+	/// includes it so its ranges address the blob; the plaintext-space accessors do not.
+	public let baseOffset: Int
+	/// Where segment 0's block starts, measured from the object: `32 + commitment_length`.
 	public let headerByteCount: Int
 	/// `segment_max + Nt` — the width of every block but possibly the last.
 	public let blockStride: Int
@@ -99,7 +104,7 @@ public struct SEALLinearGeometry: Equatable, Sendable {
 	/// of the object.
 	public func byteRange(ofSegment index: UInt64) -> Range<Int>? {
 		guard index < segmentCount else { return nil }
-		let start = headerByteCount + Int(index) * blockStride
+		let start = baseOffset + headerByteCount + Int(index) * blockStride
 		let width = index == segmentCount - 1 ? finalBlockByteCount : blockStride
 		return start..<(start + width)
 	}
@@ -147,6 +152,14 @@ extension SEALConfiguration {
 	///   below header width, and ``SEALError/immutableLayoutRequiresReadOnlyProfile``
 	///   on a `SEAL-RW-v1` configuration.
 	public func linearGeometry(objectByteCount: Int) throws -> SEALLinearGeometry {
+		try linearGeometry(objectByteCount: objectByteCount, baseOffset: 0)
+	}
+
+	/// ``linearGeometry(objectByteCount:)`` for an object stored behind a wrapper prefix
+	/// (see ``SEALEnvelope``): `baseOffset` shifts the stored byte ranges only.
+	func linearGeometry(objectByteCount: Int, baseOffset: Int) throws
+		-> SEALLinearGeometry
+	{
 		try requireImmutableProfile()
 		guard objectByteCount >= headerByteCount else {
 			throw SEALError.truncatedHeaderBlock(
@@ -163,6 +176,7 @@ extension SEALConfiguration {
 		return SEALLinearGeometry(
 			segmentCount: UInt64(trailing == 0 ? wholeBlocks : wholeBlocks + 1),
 			objectByteCount: objectByteCount,
+			baseOffset: baseOffset,
 			headerByteCount: headerByteCount,
 			blockStride: stride,
 			finalBlockByteCount: trailing == 0 ? stride : trailing,

@@ -92,6 +92,22 @@ Under the immutable profile no snapshot runs, so completeness rests on the final
 segment opening with `is_final = 1` — see `SEALLinearPrefix` for the progressive-read
 rules.
 
+A stored object carries no suite descriptor — `kdf_id` fixes the header width, so a
+reader must know the suite before it can find the first segment. `SEALEnvelope` adds a
+15-octet prefix that carries it, so a blob is self-describing and readable without a
+configuration in hand:
+
+```swift
+let envelope = try config.sealEnvelope(payload, cek: cek)
+let back = try SEALEnvelope.open(envelope, cek: cek)   // suite resolved from the prefix
+```
+
+The prefix is our framing, not the draft's (§4.11 leaves this layer to the consuming
+protocol); drop `objectOffset` octets and the remainder is the unmodified §4.11.4
+object other implementations read. It is unauthenticated but commitment-bound: every
+field it declares feeds key derivation, so altering one fails the commitment before any
+AEAD operation rather than downgrading anything.
+
 ## Building
 
 ```sh

@@ -55,6 +55,20 @@ public enum SEALError: Error, Equatable {
 	/// Trailing bytes after the last whole segment block are too few to be a segment
 	/// (shorter than the AEAD tag), so the object's segmentation is unrecoverable.
 	case malformedSegmentation(trailingByteCount: Int)
+	/// The leading bytes are not a ``SEALEnvelope`` prefix — most likely a bare stored
+	/// object, which carries no magic number.
+	case invalidEnvelopeMagic
+	/// Fewer bytes than a ``SEALEnvelope`` prefix, or than the prefix the parsed
+	/// envelope declared.
+	case truncatedEnvelope(byteCount: Int, required: Int)
+	/// A ``SEALEnvelope`` prefix in a version this build does not implement.
+	case unsupportedEnvelopeVersion(UInt8)
+	/// A ``SEALEnvelope`` profile octet other than `0x00` (read-only). The envelope
+	/// wraps the immutable layout; `0x01` is reserved for a future read-write one.
+	case unsupportedEnvelopeProfile(UInt8)
+	/// A `segment_max` outside ``SEALEnvelope/supportedSegmentMaxValues`` (§4.10):
+	/// either not one SEAL defines, or one the core's looser §4.2.1 rule admits.
+	case unsupportedEnvelopeSegmentMax(UInt32)
 	/// A stored object carrying a header but no segments. The spec permits `n_seg = 0`,
 	/// but under `SEAL-RO-v1` there is no snapshot, so an empty object is
 	/// indistinguishable from one whose segments were all deleted — this engine
