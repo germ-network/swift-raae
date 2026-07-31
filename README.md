@@ -4,10 +4,13 @@ A Swift implementation of **random-access authenticated encryption (raAE)** and 
 **SEAL** construction (Segmented Encryption and Authentication Layer), per the IETF
 draft [`draft-sullivan-cfrg-raae`](https://grittygrease.github.io/draft-sullivan-cfrg-raae/draft-sullivan-cfrg-raae.html).
 
-> **Status: early / pre-release.** Stage 0 scaffolding only — no cryptographic
-> functionality yet. The target draft is an individual Internet-Draft (Informational,
-> not CFRG-adopted) and is expected to change; see [`Spec/SOURCE.md`](Spec/SOURCE.md)
-> for the pinned snapshot. **Do not use for anything real yet.**
+> **Status: 0.1.0, pre-1.0.** The engine is complete for both profiles — write-once and
+> rewritable — and every cryptographic stage is pinned byte-exact against the draft's
+> Appendix F vectors. What is *not* settled is the target: `draft-sullivan-cfrg-raae` is
+> an individual Internet-Draft (Informational, not CFRG-adopted) and is expected to
+> change, so **stored bytes are not yet stable across draft revisions** — -02 already
+> renamed two named instantiations. See [`Spec/SOURCE.md`](Spec/SOURCE.md) for the
+> pinned snapshot and the resync procedure.
 
 ## What is raAE / SEAL?
 
@@ -28,9 +31,11 @@ commitment binding the key + parameters, and a masked-multiset-hash snapshot.
 
 The package is structured to mirror the draft's own parameterization over a suite
 table: pluggable `AEAD` and `KDF` protocols, with **[swift-crypto](https://github.com/apple/swift-crypto)**
-as the default cross-platform backend (AES-256-GCM, ChaCha20-Poly1305, HKDF-SHA256/512).
-Exotic suites (AEGIS, TurboSHAKE, AES-256-GCM-SIV) slot in behind the same protocols
-in a later stage.
+as the cross-platform backend. AES-256-GCM-SIV — the misuse-resistant suite derived
+nonce mode requires under a rewritable profile — comes from its `_CryptoExtras` module.
+No suite is hand-rolled: AEGIS and TurboSHAKE have no vetted Swift backend and stay
+unregistered until one exists, slotting in behind the same protocols when it does
+([`Spec/STAGE4-FEASIBILITY.md`](Spec/STAGE4-FEASIBILITY.md)).
 
 Platforms: macOS, iOS, and Linux (via swift-crypto).
 
@@ -129,6 +134,7 @@ swift test
 | SEAL A–B | Two-product split; SEAL configuration + writer/reader lifecycle | ✅ |
 | SEAL C | RW rewriter (RewriteSeg + snapshot rebind, F.17.1-pinned); §4.12 scheme presets | ✅ |
 | SEAL D3 | Immutable linear container (§4.11.4), F.23-pinned; `SEAL-simple` claimable | ✅ |
+| — | `SEALEnvelope`: self-describing suite prefix over the container, 0.1.0 | ✅ |
 | SEAL D1/D2/D4–D6 | Hedged + plaintext-bound nonces, extend/truncate, digest overloads | planned |
 
 Suite coverage: **AEAD** AES-128/256-GCM, ChaCha20-Poly1305, AES-256-GCM-SIV; **KDF**
