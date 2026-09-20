@@ -35,7 +35,7 @@ jobs:
     # 5.0's span surface, so these jobs compile and *run* the span fast path rather
     # than only the array fallback. The image's default Xcode is 27.0, so no
     # DEVELOPER_DIR override — the OS-27 runtime is what the `#available` branch needs.
-    runs-on: xcode-27-arm64
+    runs-on: xcode-27
     timeout-minutes: 30
     strategy:
       matrix:
