@@ -1,3 +1,4 @@
+import Crypto
 import RAAE
 import Testing
 
@@ -14,7 +15,8 @@ struct SnapIDValidationTests {
 			salt: [UInt8](repeating: 0x04, count: 32))
 		return try PayloadSchedule(
 			protocolID: ProtocolID.mutable,
-			cek: [UInt8](repeating: 0xAA, count: 32), payloadInfo: info)
+			cek: SymmetricKey(data: [UInt8](repeating: 0xAA, count: 32)),
+			payloadInfo: info)
 	}
 
 	@Test func knownSnapIDsAreAccepted() throws {
@@ -29,7 +31,8 @@ struct SnapIDValidationTests {
 			salt: [UInt8](repeating: 0x04, count: 32))
 		_ = try PayloadSchedule(
 			protocolID: ProtocolID.immutable,
-			cek: [UInt8](repeating: 0xAA, count: 32), payloadInfo: roInfo)
+			cek: SymmetricKey(data: [UInt8](repeating: 0xAA, count: 32)),
+			payloadInfo: roInfo)
 		#expect(SuiteRegistry.isKnownSnapID(SnapID.none))
 		#expect(SuiteRegistry.isKnownSnapID(SnapID.maskedMultisetHash))
 	}

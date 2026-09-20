@@ -1,3 +1,4 @@
+import Crypto
 import Foundation
 import RAAE
 
@@ -131,7 +132,7 @@ extension SEALConfiguration {
 	/// Seal a whole payload into a self-describing envelope: ``envelopePrefix`` followed
 	/// by the object ``seal(_:cek:globalAssociatedData:)`` produces.
 	public func sealEnvelope(
-		_ plaintext: Data, cek: Data, globalAssociatedData: Data = Data()
+		_ plaintext: Data, cek: SymmetricKey, globalAssociatedData: Data = Data()
 	) throws -> Data {
 		try sealEnvelope(
 			plaintext, cek: cek, globalAssociatedData: globalAssociatedData, salt: nil)
@@ -139,7 +140,7 @@ extension SEALConfiguration {
 
 	/// Vector seam: the same envelope under a pinned salt, so a KAT can compare bytes.
 	func sealEnvelope(
-		_ plaintext: Data, cek: Data, globalAssociatedData: Data, salt: [UInt8]?
+		_ plaintext: Data, cek: SymmetricKey, globalAssociatedData: Data, salt: [UInt8]?
 	) throws -> Data {
 		try envelopePrefix
 			+ seal(
@@ -235,7 +236,7 @@ extension SEALEnvelope {
 	///
 	/// A wrong CEK, a tampered prefix, a wrong `G`, or a corrupted header all fail here.
 	public func startDecryption(
-		cek: Data, envelopeBytes: Data, globalAssociatedData: Data = Data()
+		cek: SymmetricKey, envelopeBytes: Data, globalAssociatedData: Data = Data()
 	) throws -> SEALReader {
 		guard envelopeBytes.count >= objectOffset else {
 			throw SEALError.truncatedEnvelope(
@@ -251,7 +252,7 @@ extension SEALEnvelope {
 	/// one call — the entry point for reading a blob whose suite is not known in
 	/// advance.
 	public static func startDecryption(
-		cek: Data, envelopeBytes: Data, globalAssociatedData: Data = Data()
+		cek: SymmetricKey, envelopeBytes: Data, globalAssociatedData: Data = Data()
 	) throws -> (envelope: SEALEnvelope, reader: SEALReader) {
 		let envelope = try parse(envelopeBytes)
 		let reader = try envelope.startDecryption(
@@ -266,7 +267,7 @@ extension SEALEnvelope {
 	/// As with ``SEALConfiguration/open(_:cek:globalAssociatedData:)`` the final segment
 	/// is opened with `is_final = 1`, so truncation and extension fail authentication.
 	public static func open(
-		_ envelope: Data, cek: Data, globalAssociatedData: Data = Data()
+		_ envelope: Data, cek: SymmetricKey, globalAssociatedData: Data = Data()
 	) throws -> Data {
 		let parsed = try parse(envelope)
 		let start = envelope.startIndex + parsed.objectOffset

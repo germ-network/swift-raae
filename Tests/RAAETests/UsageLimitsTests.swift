@@ -1,3 +1,4 @@
+import Crypto
 import RAAE
 import Testing
 
@@ -13,7 +14,8 @@ struct UsageLimitsTests {
 			nonceMode: nonceMode, epochLength: 1,
 			salt: [UInt8](repeating: 0x04, count: 32))
 		return try PayloadSchedule(
-			protocolID: ProtocolID.mutable, cek: [UInt8](repeating: 0xAA, count: 32),
+			protocolID: ProtocolID.mutable,
+			cek: SymmetricKey(data: [UInt8](repeating: 0xAA, count: 32)),
 			payloadInfo: info)
 	}
 
@@ -60,7 +62,8 @@ struct UsageLimitsTests {
 			nonceMode: .derived, epochLength: 3,
 			salt: [UInt8](repeating: 0x04, count: 32))
 		let sched = try PayloadSchedule(
-			protocolID: ProtocolID.immutable, cek: [UInt8](repeating: 0xAA, count: 32),
+			protocolID: ProtocolID.immutable,
+			cek: SymmetricKey(data: [UInt8](repeating: 0xAA, count: 32)),
 			payloadInfo: info)
 		let b = sched.usageBudget()
 		#expect(b.perEpochKeyLog2 == 3)

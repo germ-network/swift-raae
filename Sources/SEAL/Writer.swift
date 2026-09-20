@@ -1,4 +1,6 @@
+import Crypto
 import RAAE
+import SecretBytes
 
 extension SEALConfiguration {
 	/// raAE `StartEnc(K, N, G)` (§3.2): begin authoring one object.
@@ -13,7 +15,7 @@ extension SEALConfiguration {
 	///   application context, bound into the commitment, never stored; the decryptor
 	///   re-supplies it.
 	public func startEncryption(
-		cek: [UInt8], globalAssociatedData: [UInt8] = []
+		cek: SymmetricKey, globalAssociatedData: [UInt8] = []
 	) throws -> SEALWriter {
 		try SEALWriter(
 			configuration: self, cek: cek, globalAssociatedData: globalAssociatedData,
@@ -24,7 +26,7 @@ extension SEALConfiguration {
 	/// (larger values shrink the budgets so tests can reach them). The public path
 	/// always uses the draft's `2^-32`.
 	static func startEncryptionForTesting(
-		configuration: SEALConfiguration, cek: [UInt8], advantageLog2: Int
+		configuration: SEALConfiguration, cek: SymmetricKey, advantageLog2: Int
 	) throws -> SEALWriter {
 		try SEALWriter(
 			configuration: configuration, cek: cek, globalAssociatedData: [],
@@ -56,7 +58,9 @@ public final class SEALWriter {
 	private let schedule: PayloadSchedule
 	private let budget: UsageBudget
 	private let snapshotHash: MaskedMultisetHash?
-	private var accumulator: [UInt8]
+	/// The raw accumulator, never published — `nil` exactly when there is no
+	/// snapshot authenticator (`SEAL-RO-v1`, `snap_id 0x0000`).
+	private var accumulator: SecretBytes?
 	private var epochCounts: [UInt64: UInt64] = [:]
 	private var written: Set<UInt64> = []
 	private var maxIndex: UInt64?
@@ -67,7 +71,7 @@ public final class SEALWriter {
 	/// salt exists only for byte-exact vector tests and stays package-internal — a host
 	/// choosing salts would reintroduce the uniqueness obligation the engine removes.
 	init(
-		configuration: SEALConfiguration, cek: [UInt8], globalAssociatedData: [UInt8],
+		configuration: SEALConfiguration, cek: SymmetricKey, globalAssociatedData: [UInt8],
 		advantageLog2: Int, salt: [UInt8]? = nil
 	) throws {
 		let info = configuration.payloadInfo(salt: salt ?? randomBytes(32))
@@ -82,10 +86,12 @@ public final class SEALWriter {
 		if configuration.snapID == SnapID.maskedMultisetHash {
 			let hash = MaskedMultisetHash(schedule: schedule)
 			self.snapshotHash = hash
-			self.accumulator = [UInt8](repeating: 0, count: hash.outputSize)
+			// `SecretBytes` cannot hold zero bytes; the accumulator is never empty.
+			self.accumulator = try SecretBytes(
+				bytes: [UInt8](repeating: 0, count: hash.outputSize))
 		} else {
 			self.snapshotHash = nil
-			self.accumulator = []
+			self.accumulator = nil
 		}
 	}
 
@@ -136,9 +142,9 @@ public final class SEALWriter {
 		written.insert(position.index)
 		maxIndex = max(maxIndex ?? position.index, position.index)
 		if position.isFinal { finalIndex = position.index }
-		if let hash = snapshotHash {
-			accumulator = xor(
-				accumulator,
+		if let hash = snapshotHash, let current = accumulator {
+			accumulator = xorIntoSecret(
+				current,
 				hash.contribution(
 					index: position.index,
 					tag: segment.tag(length: schedule.aead.tagLength)))
@@ -159,9 +165,13 @@ public final class SEALWriter {
 			}
 		}
 		finalized = true
-		let snapshot = snapshotHash.map {
-			$0.snapshotValue(
-				segmentCount: UInt64(written.count), accumulator: accumulator)
+		let snapshot: [UInt8]?
+		if let hash = snapshotHash, let current = accumulator {
+			snapshot = hash.snapshotValue(
+				segmentCount: UInt64(written.count),
+				accumulator: current.withUnsafeBytes { Array($0) })
+		} else {
+			snapshot = nil
 		}
 		return SealedObject(
 			header: header, snapshot: snapshot, segmentCount: UInt64(written.count),

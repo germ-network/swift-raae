@@ -1,3 +1,4 @@
+import Crypto
 // NOTE: plain (non-@testable) import — this exercises only the public surface, so it
 // fails to compile if the engine isn't actually usable by an external consumer.
 import RAAE
@@ -20,7 +21,7 @@ struct PublicAPITests {
 			salt: [UInt8](repeating: 0x04, count: 32))
 		return try PayloadSchedule(
 			protocolID: ProtocolID.mutable,
-			cek: [UInt8](repeating: 0xAA, count: 32),
+			cek: SymmetricKey(data: [UInt8](repeating: 0xAA, count: 32)),
 			payloadInfo: info)
 	}
 
@@ -66,7 +67,7 @@ struct PublicAPITests {
 		// The commitment lets a decryptor reject a wrong CEK up front.
 		let wrong = try PayloadSchedule(
 			protocolID: ProtocolID.mutable,
-			cek: [UInt8](repeating: 0xBB, count: 32),
+			cek: SymmetricKey(data: [UInt8](repeating: 0xBB, count: 32)),
 			payloadInfo: schedule.payloadInfo)
 		#expect(!ConstantTime.equals(wrong.commitment, schedule.commitment))
 	}
@@ -93,7 +94,7 @@ struct PublicAPITests {
 		#expect(throws: PayloadSchedule.ScheduleError.self) {
 			try PayloadSchedule(
 				protocolID: ProtocolID.mutable,
-				cek: [UInt8](repeating: 0xAA, count: 32),
+				cek: SymmetricKey(data: [UInt8](repeating: 0xAA, count: 32)),
 				payloadInfo: info)
 		}
 	}

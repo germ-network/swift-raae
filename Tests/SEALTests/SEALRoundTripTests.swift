@@ -1,3 +1,4 @@
+import Crypto
 import RAAE
 import Testing
 
@@ -12,7 +13,7 @@ struct SEALRoundTripTests {
 	let plaintexts: [[UInt8]] = [[1, 2, 3], [4, 5], [6, 7, 8, 9]]
 
 	func author(
-		_ config: SEALConfiguration, cek: [UInt8], globalAssociatedData: [UInt8] = []
+		_ config: SEALConfiguration, cek: SymmetricKey, globalAssociatedData: [UInt8] = []
 	) throws -> (object: SealedObject, segments: [SealedSegment]) {
 		let writer = try config.startEncryption(
 			cek: cek, globalAssociatedData: globalAssociatedData)

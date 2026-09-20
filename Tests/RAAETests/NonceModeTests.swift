@@ -1,3 +1,4 @@
+import Crypto
 import RAAE
 import Testing
 
@@ -15,7 +16,8 @@ struct NonceModeTests {
 			salt: [UInt8](repeating: 0x04, count: 32))
 		return try PayloadSchedule(
 			protocolID: ProtocolID.mutable,
-			cek: [UInt8](repeating: 0xAA, count: 32), payloadInfo: info)
+			cek: SymmetricKey(data: [UInt8](repeating: 0xAA, count: 32)),
+			payloadInfo: info)
 	}
 
 	@Test func randomOperationsRejectDerivedSchedule() throws {

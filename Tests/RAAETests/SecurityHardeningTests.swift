@@ -1,3 +1,4 @@
+import Crypto
 import RAAE
 import Testing
 
@@ -13,7 +14,8 @@ struct SecurityHardeningTests {
 			salt: [UInt8](repeating: 0x04, count: 32))
 		return try PayloadSchedule(
 			protocolID: ProtocolID.mutable,
-			cek: [UInt8](repeating: 0xAA, count: 32), payloadInfo: info)
+			cek: SymmetricKey(data: [UInt8](repeating: 0xAA, count: 32)),
+			payloadInfo: info)
 	}
 
 	// MARK: H1 — over-large associated data must not collide in the segment AAD.
@@ -90,7 +92,8 @@ struct SecurityHardeningTests {
 			#expect(throws: PayloadSchedule.ScheduleError.invalidCEKLength(badLength)) {
 				_ = try PayloadSchedule(
 					protocolID: ProtocolID.mutable,
-					cek: [UInt8](repeating: 0xAA, count: badLength),
+					cek: SymmetricKey(
+						data: [UInt8](repeating: 0xAA, count: badLength)),
 					payloadInfo: info)
 			}
 		}

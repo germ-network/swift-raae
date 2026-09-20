@@ -1,3 +1,4 @@
+import Crypto
 import Foundation
 import Testing
 
@@ -15,7 +16,8 @@ struct SEALSimpleVectorTests {
 		let v = try Vectors.load("F23")
 		// SEAL-RO-v1 (write-once): Vectors.schedule pins SEAL-RW-v1, so build directly.
 		let schedule = try PayloadSchedule(
-			protocolID: ProtocolID.immutable, cek: Hex.decode(v["cek_hex"] as! String),
+			protocolID: ProtocolID.immutable,
+			cek: SymmetricKey(data: Hex.decode(v["cek_hex"] as! String)),
 			payloadInfo: Vectors.payloadInfo(from: v))
 		return (schedule, v)
 	}

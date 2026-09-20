@@ -1,3 +1,4 @@
+import Crypto
 import RAAE
 import Testing
 
@@ -39,7 +40,8 @@ struct DerivedNonceRangeTests {
 			salt: [UInt8](repeating: 0x04, count: 32))
 		let schedule = try PayloadSchedule(
 			protocolID: ProtocolID.mutable,
-			cek: [UInt8](repeating: 0xAA, count: 32), payloadInfo: info)
+			cek: SymmetricKey(data: [UInt8](repeating: 0xAA, count: 32)),
+			payloadInfo: info)
 		let bad = SegmentPosition(index: UInt64(1) << 63, isFinal: false)
 		#expect(
 			throws: Segment.SegmentError.indexTooLargeForDerivedMode(bad.index)

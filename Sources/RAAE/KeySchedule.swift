@@ -117,14 +117,14 @@ public struct PayloadSchedule {
 	///   adversaries; see ``minCommitmentLength``).
 	public init(
 		protocolID: [UInt8],
-		cek: [UInt8],
+		cek: SymmetricKey,
 		payloadInfo: PayloadInfo,
 		globalAssociatedData: [UInt8] = [],
 		commitmentLength: Int? = nil
 	) throws {
 		try payloadInfo.validate()
-		guard cek.count == Self.cekLength else {
-			throw ScheduleError.invalidCEKLength(cek.count)
+		guard cek.bitCount == Self.cekLength * 8 else {
+			throw ScheduleError.invalidCEKLength(cek.bitCount / 8)
 		}
 		guard let aead = SuiteRegistry.aead(id: payloadInfo.aeadID) else {
 			throw ScheduleError.unsupportedAEAD(payloadInfo.aeadID)
@@ -189,19 +189,19 @@ public struct PayloadSchedule {
 		// as one framed element after payload_info (empty G is still an element).
 		self.commitment = kdf.derive(
 			protocolID: protocolID, label: Label.commit,
-			ikm: [cek], info: info + [globalAssociatedData], outputLength: commitLen)
+			ikm: cek, info: info + [globalAssociatedData], outputLength: commitLen)
 		// Secret outputs → deriveKey(...) -> SymmetricKey (zeroizing).
 		self.payloadKey = kdf.deriveKey(
 			protocolID: protocolID, label: Label.payloadKey,
-			ikm: [cek], info: info, outputLength: aead.keyLength)
+			ikm: cek, info: info, outputLength: aead.keyLength)
 		self.snapKey = kdf.deriveKey(
 			protocolID: protocolID, label: Label.accKey,
-			ikm: [cek], info: info, outputLength: kdf.outputSize)
+			ikm: cek, info: info, outputLength: kdf.outputSize)
 		self.nonceBase =
 			payloadInfo.nonceMode == .derived
 			? kdf.deriveKey(
 				protocolID: protocolID, label: Label.nonceBase,
-				ikm: [cek], info: info, outputLength: aead.nonceLength)
+				ikm: cek, info: info, outputLength: aead.nonceLength)
 			: nil
 	}
 
@@ -245,7 +245,7 @@ public struct PayloadSchedule {
 	///   ``CommitmentError/commitmentMismatch``, exactly like a wrong CEK.
 	public static func startDecrypt(
 		protocolID: [UInt8],
-		cek: [UInt8],
+		cek: SymmetricKey,
 		payloadInfo: PayloadInfo,
 		publishedCommitment: [UInt8],
 		expectedCommitmentLength: Int? = nil,
@@ -267,11 +267,9 @@ public struct PayloadSchedule {
 	/// Returns a zeroizing `SymmetricKey`; internal, never vended raw (§5.8).
 	func segmentKey(index: UInt64) -> SymmetricKey {
 		let epochIndex = index >> payloadInfo.epochLength
-		// payload_key is the (secret) ikm; the framing transiently materializes it.
-		let payloadKeyBytes = payloadKey.withUnsafeBytes { Array($0) }
 		return kdf.deriveKey(
 			protocolID: protocolID, label: Label.epochKey,
-			ikm: [payloadKeyBytes], info: [Bytes.uint64(epochIndex)],
+			ikm: payloadKey, info: [Bytes.uint64(epochIndex)],
 			outputLength: aead.keyLength)
 	}
 }

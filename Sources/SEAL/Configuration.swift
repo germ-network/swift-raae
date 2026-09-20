@@ -1,3 +1,4 @@
+import Crypto
 import RAAE
 
 /// Errors raised by the SEAL engine layer (the core's typed errors — `ScheduleError`,
@@ -246,11 +247,11 @@ public struct SEALConfiguration: Sendable {
 
 	/// Generate a fresh 32-octet CEK (§4.5) from the system CSPRNG.
 	///
-	/// - Note: returned as a caller-owned `[UInt8]` to match the core's CEK
-	///   parameters; Swift arrays are not zeroizing — a host holding CEKs long-term
-	///   should manage them in its own secure storage.
-	public static func generateCEK() -> [UInt8] {
-		randomBytes(PayloadSchedule.cekLength)
+	/// - Note: the CEK is a `SymmetricKey`, held in zeroizing storage and scrubbed
+	///   when the last reference is released — a host persisting CEKs long-term
+	///   should manage that storage itself.
+	public static func generateCEK() -> SymmetricKey {
+		SymmetricKey(size: .bits256)
 	}
 }
 

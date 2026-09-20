@@ -44,7 +44,7 @@ struct SEALConfigurationTests {
 	@Test func generatedCEKsAreFreshAndSized() {
 		let a = SEALConfiguration.generateCEK()
 		let b = SEALConfiguration.generateCEK()
-		#expect(a.count == PayloadSchedule.cekLength)
+		#expect(a.bitCount == PayloadSchedule.cekLength * 8)
 		#expect(a != b)  // 2^-256 false-failure probability
 	}
 

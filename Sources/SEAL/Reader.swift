@@ -1,3 +1,4 @@
+import Crypto
 import RAAE
 
 extension SEALConfiguration {
@@ -11,7 +12,7 @@ extension SEALConfiguration {
 	/// parameters come from application context, not from the (attacker-writable)
 	/// stored object, and the engine pins `commitment_length = Nh`.
 	public func startDecryption(
-		cek: [UInt8], header: SealedObjectHeader, globalAssociatedData: [UInt8] = []
+		cek: SymmetricKey, header: SealedObjectHeader, globalAssociatedData: [UInt8] = []
 	) throws -> SEALReader {
 		let info = header.payloadInfo
 		guard payloadInfo(salt: info.salt) == info else {

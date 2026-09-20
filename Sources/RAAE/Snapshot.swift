@@ -43,15 +43,11 @@ public struct MaskedMultisetHash {
 		self.snapKey = snapKey
 	}
 
-	/// The (secret) snap_key as a transient `[UInt8]` ikm for framing. See the note on
-	/// ``KeyDerivation/deriveKey(protocolID:label:ikm:info:outputLength:)``.
-	private var snapKeyBytes: [UInt8] { snapKey.withUnsafeBytes { Array($0) } }
-
 	/// `contrib(i) = KDF(protocol_id, "acc_contrib", [snap_key], [uint64(i), tag(i)], Nh)`.
 	public func contribution(index: UInt64, tag: [UInt8]) -> [UInt8] {
 		kdf.derive(
 			protocolID: protocolID, label: Label.accContrib,
-			ikm: [snapKeyBytes], info: [Bytes.uint64(index), tag],
+			ikm: snapKey, info: [Bytes.uint64(index), tag],
 			outputLength: outputSize)
 	}
 
@@ -72,7 +68,7 @@ public struct MaskedMultisetHash {
 	public func snapshotTag(segmentCount: UInt64, accumulator: [UInt8]) -> [UInt8] {
 		kdf.derive(
 			protocolID: protocolID, label: Label.snapshotTag,
-			ikm: [snapKeyBytes], info: [Bytes.uint64(segmentCount), accumulator],
+			ikm: snapKey, info: [Bytes.uint64(segmentCount), accumulator],
 			outputLength: outputSize)
 	}
 
@@ -80,7 +76,7 @@ public struct MaskedMultisetHash {
 	public func mask(segmentCount: UInt64, snapshotTag: [UInt8]) -> [UInt8] {
 		kdf.derive(
 			protocolID: protocolID, label: Label.snapshotMask,
-			ikm: [snapKeyBytes], info: [Bytes.uint64(segmentCount), snapshotTag],
+			ikm: snapKey, info: [Bytes.uint64(segmentCount), snapshotTag],
 			outputLength: outputSize)
 	}
 
@@ -97,10 +93,16 @@ public struct MaskedMultisetHash {
 	public func rewrittenAccumulator(
 		accumulator: [UInt8], index: UInt64, oldTag: [UInt8], newTag: [UInt8]
 	) -> [UInt8] {
-		let delta = xor(
+		xor(accumulator, rewriteDelta(index: index, oldTag: oldTag, newTag: newTag))
+	}
+
+	/// The XOR a rewrite applies to the accumulator: `contrib(i, old) XOR contrib(i, new)`.
+	/// Package-scoped so the SEAL engine can fold it into a `SecretBytes` accumulator
+	/// without materializing one.
+	package func rewriteDelta(index: UInt64, oldTag: [UInt8], newTag: [UInt8]) -> [UInt8] {
+		xor(
 			contribution(index: index, tag: oldTag),
 			contribution(index: index, tag: newTag))
-		return xor(accumulator, delta)
 	}
 
 	/// `SnapVerify`: recompute the snapshot over the present segments and compare it,

@@ -57,7 +57,7 @@ enum Vectors {
 	static func schedule(from v: [String: Any]) throws -> PayloadSchedule {
 		try PayloadSchedule(
 			protocolID: ProtocolID.mutable,
-			cek: Hex.decode(v["cek_hex"] as! String),
+			cek: SymmetricKey(data: Hex.decode(v["cek_hex"] as! String)),
 			payloadInfo: payloadInfo(from: v)
 		)
 	}

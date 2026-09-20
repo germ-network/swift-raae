@@ -49,7 +49,12 @@ jobs:
     name: Test Linux
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    container: swift:6.1
+    # 6.2 is the floor the package's tools-version requires; a 6.1 toolchain cannot
+    # even parse the manifest. This job is also the only CI coverage of the span
+    # fast path (the gate is true unconditionally on non-CryptoKit platforms),
+    # while the macOS jobs below build against Xcode 26.2, whose CryptoKit has no
+    # span surface — they cover the array path.
+    container: swift:6.2
     steps:
       - uses: actions/checkout@v5
       - name: swift test

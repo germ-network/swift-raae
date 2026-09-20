@@ -1,3 +1,4 @@
+import Crypto
 import RAAE
 import Testing
 
@@ -18,7 +19,7 @@ struct SEALRewriteTests {
 		let config = try SEALConfiguration(
 			profile: .readWrite, aeadID: 0x001F, kdfID: 0x0001, segmentMax: 65536,
 			epochLength: 0)
-		let cek = Hex.decode(v["cek_hex"] as! String)
+		let cek = SymmetricKey(data: Hex.decode(v["cek_hex"] as! String))
 		let header = SealedObjectHeader(
 			payloadInfo: Vectors.payloadInfo(from: v),
 			commitment: Hex.decode(
@@ -74,7 +75,7 @@ struct SEALRewriteTests {
 		let config = try SEALConfiguration(
 			profile: .readWrite, aeadID: 0x0002, kdfID: 0x0001, segmentMax: 65536,
 			epochLength: 1)
-		let cek = Hex.decode(v["cek_hex"] as! String)
+		let cek = SymmetricKey(data: Hex.decode(v["cek_hex"] as! String))
 		let header = SealedObjectHeader(
 			payloadInfo: Vectors.payloadInfo(from: v),
 			commitment: Hex.decode(

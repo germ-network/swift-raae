@@ -119,6 +119,31 @@ public enum Segment {
 		return nonce
 	}
 
+	/// `derivedNonce(nonceBase:position:)` reading `nonce_base` straight out of its
+	/// zeroizing `SymmetricKey`: the XOR happens while the bytes are borrowed, so no
+	/// heap copy of the raw `nonce_base` is ever made (the returned nonce is public).
+	private static func derivedNonce(base: SymmetricKey, position: SegmentPosition) throws
+		-> [UInt8]
+	{
+		guard position.index < (UInt64(1) << 63) else {
+			throw SegmentError.indexTooLargeForDerivedMode(position.index)
+		}
+		guard base.bitCount / 8 >= 8 else {
+			throw SegmentError.nonceTooShortForDerivedMode(base.bitCount / 8)
+		}
+		let value = (position.index << 1) | (position.isFinal ? 1 : 0)
+		let valueBytes = Bytes.uint64(value)  // 8 octets, big-endian
+		return base.withUnsafeBytes { baseBytes in
+			let count = baseBytes.count
+			var nonce = [UInt8](repeating: 0, count: count)
+			for i in 0..<count { nonce[i] = baseBytes[i] }
+			for offset in 0..<8 {
+				nonce[count - 1 - offset] ^= valueBytes[7 - offset]
+			}
+			return nonce
+		}
+	}
+
 	/// Encrypt one segment in random nonce mode, returning `(nonce, ciphertext = ct||tag)`.
 	///
 	/// The nonce is caller-supplied — the pinned-nonce seam the byte-exact KATs and the
@@ -137,8 +162,8 @@ public enum Segment {
 		let key = schedule.segmentKey(index: position.index)
 		let aad = aadRandomMode(
 			position: position, associatedData: associatedData, kdf: schedule.kdf)
-		let ct = try schedule.aead.seal(
-			key: key, nonce: nonce, aad: aad, plaintext: plaintext)
+		let ct = try sealSegment(
+			aead: schedule.aead, key: key, nonce: nonce, aad: aad, plaintext: plaintext)
 		return (nonce, ct)
 	}
 
@@ -156,8 +181,9 @@ public enum Segment {
 		let key = schedule.segmentKey(index: position.index)
 		let aad = aadRandomMode(
 			position: position, associatedData: associatedData, kdf: schedule.kdf)
-		return try schedule.aead.open(
-			key: key, nonce: nonce, aad: aad, ciphertext: ciphertext)
+		return try openSegment(
+			aead: schedule.aead, key: key, nonce: nonce, aad: aad,
+			ciphertext: ciphertext)
 	}
 
 	/// Encrypt one segment in derived nonce mode, returning `ct || tag`. No nonce is
@@ -201,11 +227,10 @@ public enum Segment {
 			throw SegmentError.missingNonceBase
 		}
 		let key = schedule.segmentKey(index: position.index)
-		let nonceBase = nonceBaseKey.withUnsafeBytes { Array($0) }
-		let nonce = try derivedNonce(nonceBase: nonceBase, position: position)
+		let nonce = try derivedNonce(base: nonceBaseKey, position: position)
 		let aad = aadDerivedMode(associatedData: associatedData, kdf: schedule.kdf)
-		return try schedule.aead.seal(
-			key: key, nonce: nonce, aad: aad, plaintext: plaintext)
+		return try sealSegment(
+			aead: schedule.aead, key: key, nonce: nonce, aad: aad, plaintext: plaintext)
 	}
 
 	/// Decrypt one segment in derived nonce mode; throws on AEAD authentication failure.
@@ -222,11 +247,11 @@ public enum Segment {
 			throw SegmentError.missingNonceBase
 		}
 		let key = schedule.segmentKey(index: position.index)
-		let nonceBase = nonceBaseKey.withUnsafeBytes { Array($0) }
-		let nonce = try derivedNonce(nonceBase: nonceBase, position: position)
+		let nonce = try derivedNonce(base: nonceBaseKey, position: position)
 		let aad = aadDerivedMode(associatedData: associatedData, kdf: schedule.kdf)
-		return try schedule.aead.open(
-			key: key, nonce: nonce, aad: aad, ciphertext: ciphertext)
+		return try openSegment(
+			aead: schedule.aead, key: key, nonce: nonce, aad: aad,
+			ciphertext: ciphertext)
 	}
 
 	/// Generate a fresh random `Nn`-octet nonce for random nonce mode.

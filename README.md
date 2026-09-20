@@ -75,7 +75,7 @@ layout (§4.11.4), which together with the `.simple` preset is the spec's
 
 ```swift
 let config = try SEALConfiguration(scheme: .simple, aeadID: 0x0002, kdfID: 0x0001)
-let cek = Data(SEALConfiguration.generateCEK())
+let cek = SEALConfiguration.generateCEK()
 
 let object = try config.seal(payload, cek: cek)   // salt ‖ commitment ‖ segments
 let back = try config.open(object, cek: cek)      // commitment checked before any segment

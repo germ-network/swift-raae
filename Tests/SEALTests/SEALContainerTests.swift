@@ -1,3 +1,4 @@
+import Crypto
 import Foundation
 import RAAE
 import Testing
@@ -24,7 +25,7 @@ struct SEALContainerTests {
 	@Test func f23StoredObjectOpens() throws {
 		let v = try Vectors.load("F23")
 		let stored = Data(Hex.decode(v["stored_object_hex"] as! String))
-		let cek = Data(Hex.decode(v["cek_hex"] as! String))
+		let cek = SymmetricKey(data: Hex.decode(v["cek_hex"] as! String))
 		let seg = v["segment_0"] as! [String: Any]
 
 		#expect(stored.count == 92)  // 32 salt + 32 commitment + 12 ct + 16 tag
@@ -59,7 +60,7 @@ struct SEALContainerTests {
 
 	@Test(arguments: [0, 1, 4095, 4096, 8192, 10240])
 	func roundTripsAtEveryBoundary(_ length: Int) throws {
-		let cek = Data(SEALConfiguration.generateCEK())
+		let cek = SEALConfiguration.generateCEK()
 		let original = payload(length)
 		let object = try small.seal(original, cek: cek)
 		#expect(try small.open(object, cek: cek) == original)
@@ -71,7 +72,7 @@ struct SEALContainerTests {
 	}
 
 	@Test func globalAssociatedDataMustMatch() throws {
-		let cek = Data(SEALConfiguration.generateCEK())
+		let cek = SEALConfiguration.generateCEK()
 		let g = Data("attachment-42".utf8)
 		let object = try small.seal(payload(100), cek: cek, globalAssociatedData: g)
 
@@ -87,16 +88,16 @@ struct SEALContainerTests {
 
 	@Test func wrongCEKFailsAtTheCommitment() throws {
 		let object = try small.seal(
-			payload(50), cek: Data(SEALConfiguration.generateCEK()))
+			payload(50), cek: SEALConfiguration.generateCEK())
 		#expect(throws: PayloadSchedule.CommitmentError.commitmentMismatch) {
-			_ = try small.open(object, cek: Data(SEALConfiguration.generateCEK()))
+			_ = try small.open(object, cek: SEALConfiguration.generateCEK())
 		}
 	}
 
 	// MARK: Header block
 
 	@Test func headerBlockRoundTrips() throws {
-		let cek = Data(SEALConfiguration.generateCEK())
+		let cek = SEALConfiguration.generateCEK()
 		let object = try small.seal(payload(10), cek: cek)
 
 		#expect(small.headerByteCount == 64)
@@ -119,7 +120,7 @@ struct SEALContainerTests {
 	// MARK: Geometry
 
 	@Test func geometryTilesTheObjectExactly() throws {
-		let cek = Data(SEALConfiguration.generateCEK())
+		let cek = SEALConfiguration.generateCEK()
 		let object = try small.seal(payload(10240), cek: cek)  // 2 full + 1 short
 		let geometry = try small.linearGeometry(objectByteCount: object.count)
 
@@ -155,7 +156,7 @@ struct SEALContainerTests {
 	}
 
 	@Test func plaintextAddressing() throws {
-		let cek = Data(SEALConfiguration.generateCEK())
+		let cek = SEALConfiguration.generateCEK()
 		let original = payload(10240)
 		let object = try small.seal(original, cek: cek)
 		let geometry = try small.linearGeometry(objectByteCount: object.count)
@@ -188,7 +189,7 @@ struct SEALContainerTests {
 	// MARK: Random access
 
 	@Test func segmentsOpenIndependentlyAndOnlyAtTheirOwnPosition() throws {
-		let cek = Data(SEALConfiguration.generateCEK())
+		let cek = SEALConfiguration.generateCEK()
 		let original = payload(10240)
 		let object = try small.seal(original, cek: cek)
 		let geometry = try small.linearGeometry(objectByteCount: object.count)
@@ -217,7 +218,7 @@ struct SEALContainerTests {
 	/// attacker-reachable (a truncated fetch), so it must be a typed error, never a trap.
 	@Test(arguments: [0, 1, 15])
 	func blocksShorterThanATagAreRejected(_ length: Int) throws {
-		let cek = Data(SEALConfiguration.generateCEK())
+		let cek = SEALConfiguration.generateCEK()
 		let object = try small.seal(payload(100), cek: cek)
 		let reader = try small.startDecryption(cek: cek, headerBlock: object)
 
@@ -230,7 +231,7 @@ struct SEALContainerTests {
 
 	@Test func fullLengthFinalSegmentIsFinalOnlyUnderIsFinal() throws {
 		// An exact multiple of segment_max: the last block is full-width *and* final.
-		let cek = Data(SEALConfiguration.generateCEK())
+		let cek = SEALConfiguration.generateCEK()
 		let object = try small.seal(payload(8192), cek: cek)
 		let geometry = try small.linearGeometry(objectByteCount: object.count)
 		let reader = try small.startDecryption(cek: cek, headerBlock: object)
@@ -251,7 +252,7 @@ struct SEALContainerTests {
 	// MARK: Partial fetches
 
 	@Test func prefixParsingAtEveryCutPoint() throws {
-		let cek = Data(SEALConfiguration.generateCEK())
+		let cek = SEALConfiguration.generateCEK()
 		let object = try small.seal(payload(10240), cek: cek)  // 3 segments, short final
 		let stride = small.segmentBlockByteCount
 
@@ -289,7 +290,7 @@ struct SEALContainerTests {
 	}
 
 	@Test func progressiveReadProvesCompletenessOnTheFinalBlock() throws {
-		let cek = Data(SEALConfiguration.generateCEK())
+		let cek = SEALConfiguration.generateCEK()
 		let original = payload(10240)
 		let object = try small.seal(original, cek: cek)
 		let stride = small.segmentBlockByteCount
@@ -333,7 +334,7 @@ struct SEALContainerTests {
 	// MARK: Tamper and truncation
 
 	@Test func truncationAndExtensionFailClosed() throws {
-		let cek = Data(SEALConfiguration.generateCEK())
+		let cek = SEALConfiguration.generateCEK()
 		let object = try small.seal(payload(10240), cek: cek)
 
 		// Dropping the final segment: the new last block is interior, so opening it
@@ -357,7 +358,7 @@ struct SEALContainerTests {
 	}
 
 	@Test func reorderedSegmentsFail() throws {
-		let cek = Data(SEALConfiguration.generateCEK())
+		let cek = SEALConfiguration.generateCEK()
 		let object = try small.seal(payload(8192), cek: cek)  // 2 full-width blocks
 		let stride = small.segmentBlockByteCount
 		let swapped =
@@ -372,7 +373,7 @@ struct SEALContainerTests {
 	/// `Data` slices keep their parent's indices, so an object handed over as a slice of
 	/// a larger buffer (a framed download, a memory-mapped file) must parse identically.
 	@Test func acceptsObjectsPresentedAsNonZeroBasedSlices() throws {
-		let cek = Data(SEALConfiguration.generateCEK())
+		let cek = SEALConfiguration.generateCEK()
 		let original = payload(10240)
 		let object = try small.seal(original, cek: cek)
 		let framed = Data(repeating: 0xFF, count: 7) + object
@@ -390,7 +391,7 @@ struct SEALContainerTests {
 	@Test func mutableProfileIsRejectedOnEveryEntryPoint() throws {
 		let rw = try SEALConfiguration(
 			profile: .readWrite, aeadID: 0x0002, kdfID: 0x0001, segmentMax: 4096)
-		let cek = Data(SEALConfiguration.generateCEK())
+		let cek = SEALConfiguration.generateCEK()
 		#expect(throws: SEALError.immutableLayoutRequiresReadOnlyProfile) {
 			_ = try rw.seal(payload(10), cek: cek)
 		}

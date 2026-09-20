@@ -1,3 +1,4 @@
+import Crypto
 import Foundation
 import Testing
 
@@ -104,7 +105,8 @@ struct DerivedNonceTests {
 		info.aeadID = 0x001F  // AES-256-GCM-SIV (MRAE)
 		let schedule = try PayloadSchedule(
 			protocolID: ProtocolID.mutable,
-			cek: [UInt8](repeating: 0xAA, count: 32), payloadInfo: info)
+			cek: SymmetricKey(data: [UInt8](repeating: 0xAA, count: 32)),
+			payloadInfo: info)
 		#expect(schedule.nonceBase != nil)
 
 		for (index, isFinal) in [(UInt64(0), false), (UInt64(1), true), (UInt64(5), false)]
