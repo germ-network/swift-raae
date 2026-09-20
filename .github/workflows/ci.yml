@@ -31,10 +31,12 @@ jobs:
 
   test:
     name: Test MacOS
-    runs-on: macOS-26
+    # macOS 27 + Xcode 27 (public preview): this image's CryptoKit has swift-crypto
+    # 5.0's span surface, so these jobs compile and *run* the span fast path rather
+    # than only the array fallback. The image's default Xcode is 27.0, so no
+    # DEVELOPER_DIR override — the OS-27 runtime is what the `#available` branch needs.
+    runs-on: xcode-27-arm64
     timeout-minutes: 30
-    env:
-      DEVELOPER_DIR: /Applications/Xcode_26.2.app
     strategy:
       matrix:
         destination:
@@ -50,10 +52,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # 6.2 is the floor the package's tools-version requires; a 6.1 toolchain cannot
-    # even parse the manifest. This job is also the only CI coverage of the span
-    # fast path (the gate is true unconditionally on non-CryptoKit platforms),
-    # while the macOS jobs below build against Xcode 26.2, whose CryptoKit has no
-    # span surface — they cover the array path.
+    # even parse the manifest. This job also covers the span fast path on a
+    # non-CryptoKit platform, where the gate is true unconditionally rather than
+    # OS-gated. The equivalence suites diff both paths in-process on either job.
     container: swift:6.2
     steps:
       - uses: actions/checkout@v5
