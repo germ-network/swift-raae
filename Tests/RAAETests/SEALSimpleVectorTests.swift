@@ -38,7 +38,7 @@ struct SEALSimpleVectorTests {
 
 		// The derived nonce is fixed by (index, is_final).
 		let nonce = try Segment.derivedNonce(
-			nonceBase: keyBytes(schedule.nonceBase!), position: pos)
+			nonceBase: schedule.nonceBase!, position: pos)
 		#expect(Hex.encode(nonce) == seg["nonce_hex"] as! String)
 
 		// Decrypt recovers the (unpublished) plaintext; success authenticates the path.

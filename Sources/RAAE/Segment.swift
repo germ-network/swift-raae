@@ -1,5 +1,6 @@
 import Crypto
 import Foundation
+import SecretBytes
 
 /// A segment's position: its index and whether it is the final segment (§4.4).
 public struct SegmentPosition: Equatable, Sendable {
@@ -96,44 +97,28 @@ public enum Segment {
 	/// `nonce(i) = nonce_base XOR ((i<<1)|is_final)` (§4.5.3): the value is encoded as a
 	/// big-endian integer right-aligned to (and XORed into) the low octets of `nonce_base`.
 	///
+	/// `nonce_base` is read straight out of its zeroizing `SecretBytes` and never retained:
+	/// the XOR happens while the bytes are borrowed. The one `[UInt8]` is the returned
+	/// nonce, a masked copy of the base — low 8 octets XORed, the rest copied verbatim —
+	/// materialized because the AEAD takes its nonce as bytes.
+	///
 	/// `index` must be below `2^63` so `(i<<1)|is_final` fits the 64-bit XOR block —
 	/// Swift's `<<` silently discards the shifted-out top bit, so a larger index would
 	/// alias the nonce of `index − 2^63`. (Not exploitable today — indices `2^63` apart
 	/// always fall in different epochs for `r ≤ 63`, hence different segment keys — but
 	/// the draft's nonce-injectivity assumption should not rest on that.)
-	public static func derivedNonce(nonceBase: [UInt8], position: SegmentPosition) throws
+	public static func derivedNonce(nonceBase: SecretBytes, position: SegmentPosition) throws
 		-> [UInt8]
 	{
 		guard position.index < (UInt64(1) << 63) else {
 			throw SegmentError.indexTooLargeForDerivedMode(position.index)
 		}
-		guard nonceBase.count >= 8 else {
-			throw SegmentError.nonceTooShortForDerivedMode(nonceBase.count)
-		}
-		let value = (position.index << 1) | (position.isFinal ? 1 : 0)
-		var nonce = nonceBase
-		let valueBytes = Bytes.uint64(value)  // 8 octets, big-endian
-		for offset in 0..<8 {
-			nonce[nonce.count - 1 - offset] ^= valueBytes[7 - offset]
-		}
-		return nonce
-	}
-
-	/// `derivedNonce(nonceBase:position:)` reading `nonce_base` straight out of its
-	/// zeroizing `SymmetricKey`: the XOR happens while the bytes are borrowed, so no
-	/// heap copy of the raw `nonce_base` is ever made (the returned nonce is public).
-	private static func derivedNonce(base: SymmetricKey, position: SegmentPosition) throws
-		-> [UInt8]
-	{
-		guard position.index < (UInt64(1) << 63) else {
-			throw SegmentError.indexTooLargeForDerivedMode(position.index)
-		}
-		guard base.bitCount / 8 >= 8 else {
-			throw SegmentError.nonceTooShortForDerivedMode(base.bitCount / 8)
+		guard nonceBase.byteCount >= 8 else {
+			throw SegmentError.nonceTooShortForDerivedMode(nonceBase.byteCount)
 		}
 		let value = (position.index << 1) | (position.isFinal ? 1 : 0)
 		let valueBytes = Bytes.uint64(value)  // 8 octets, big-endian
-		return base.withUnsafeBytes { baseBytes in
+		return nonceBase.withUnsafeBytes { baseBytes in
 			let count = baseBytes.count
 			var nonce = [UInt8](repeating: 0, count: count)
 			for i in 0..<count { nonce[i] = baseBytes[i] }
@@ -223,11 +208,11 @@ public enum Segment {
 	) throws -> [UInt8] {
 		try checkNonceMode(.derived, schedule: schedule)
 		try checkSegmentMax(length: plaintext.count, schedule: schedule)
-		guard let nonceBaseKey = schedule.nonceBase else {
+		guard let nonceBase = schedule.nonceBase else {
 			throw SegmentError.missingNonceBase
 		}
 		let key = schedule.segmentKey(index: position.index)
-		let nonce = try derivedNonce(base: nonceBaseKey, position: position)
+		let nonce = try derivedNonce(nonceBase: nonceBase, position: position)
 		let aad = aadDerivedMode(associatedData: associatedData, kdf: schedule.kdf)
 		return try sealSegment(
 			aead: schedule.aead, key: key, nonce: nonce, aad: aad, plaintext: plaintext)
@@ -243,11 +228,11 @@ public enum Segment {
 		try checkNonceMode(.derived, schedule: schedule)
 		try checkSegmentMax(
 			length: ciphertext.count - schedule.aead.tagLength, schedule: schedule)
-		guard let nonceBaseKey = schedule.nonceBase else {
+		guard let nonceBase = schedule.nonceBase else {
 			throw SegmentError.missingNonceBase
 		}
 		let key = schedule.segmentKey(index: position.index)
-		let nonce = try derivedNonce(base: nonceBaseKey, position: position)
+		let nonce = try derivedNonce(nonceBase: nonceBase, position: position)
 		let aad = aadDerivedMode(associatedData: associatedData, kdf: schedule.kdf)
 		return try openSegment(
 			aead: schedule.aead, key: key, nonce: nonce, aad: aad,

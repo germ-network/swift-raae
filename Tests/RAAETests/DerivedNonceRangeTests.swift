@@ -1,5 +1,6 @@
 import Crypto
 import RAAE
+import SecretBytes
 import Testing
 
 /// Derived-nonce index range (§4.5.3): `(i<<1)|is_final` must fit the 64-bit value
@@ -11,7 +12,7 @@ struct DerivedNonceRangeTests {
 	static let maxIndex = (UInt64(1) << 63) - 1
 
 	@Test func boundaryIndexIsAccepted() throws {
-		let base = [UInt8](repeating: 0, count: 12)
+		let base = try SecretBytes(bytes: [UInt8](repeating: 0, count: 12))
 		// The largest legal index derives a nonce whose low 8 octets encode
 		// (i<<1)|is_final exactly: 2^64 − 2 for is_final = 0, 2^64 − 1 for 1.
 		let atMax = try Segment.derivedNonce(
@@ -23,11 +24,11 @@ struct DerivedNonceRangeTests {
 	}
 
 	@Test func overflowingIndexIsRejected() {
-		let base = [UInt8](repeating: 0, count: 12)
 		for index in [UInt64(1) << 63, UInt64.max] {
 			#expect(throws: Segment.SegmentError.indexTooLargeForDerivedMode(index)) {
 				_ = try Segment.derivedNonce(
-					nonceBase: base,
+					nonceBase: try SecretBytes(
+						bytes: [UInt8](repeating: 0, count: 12)),
 					position: .init(index: index, isFinal: false))
 			}
 		}

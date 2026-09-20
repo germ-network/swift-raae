@@ -7,7 +7,7 @@ material out of plain heap `[UInt8]` and into zeroizing custody. The wire format
 unchanged: every Appendix F vector still derives byte-identical keys, commitments,
 segments, and snapshots.
 
-**Two breaking API changes.**
+**Three breaking API changes.**
 
 - **The CEK is a `SymmetricKey`, not `[UInt8]`/`Data`.** Every public entry point —
   `PayloadSchedule.init(cek:)`/`startDecrypt(cek:)`, the SEAL engine's
@@ -23,6 +23,15 @@ segments, and snapshots.
   derivation in the draft mixes exactly one secret, so the list form only ever held one
   element; `info` stays a list. Implementations of the protocol must update. `Framing`
   is unchanged and still encodes each `info` element individually.
+
+- **`Segment.derivedNonce(nonceBase:)` takes a `SecretBytes`, not `[UInt8]`.** The
+  draft's §4.5.3 primitive stays public for implementers and vector tooling; a caller
+  holding the nonce base as bytes wraps it once with `SecretBytes(bytes:)`. `nonce_base`
+  is a *nonce*, not a key — it is never passed to a key-taking API — so it is held in
+  `SecretBytes` custody rather than `SymmetricKey`, exactly as the accumulator is. The
+  *returned* nonce stays `[UInt8]`: AEAD security requires nonce *uniqueness*, not secrecy,
+  and the value is an immediate AEAD input. It is a masked copy of the base — low 8 octets
+  XORed, the rest copied verbatim — which `Spec/NOTES.md` records as the honest limit.
 
 **Platform floor.** The deployment floor rises to **macOS 15 / iOS 18** (was 14/17),
 forced by `swift-secret-bytes` 0.5, and the package now needs a Swift 6.2 toolchain.

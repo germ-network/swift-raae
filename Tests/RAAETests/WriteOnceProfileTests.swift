@@ -102,7 +102,7 @@ struct WriteOnceProfileTests {
 			keyHex(schedule.segmentKey(index: 1))
 				== "19399e1302ed3dc9e3bfa4ac952b6fba799c2a5830fb5ee34afbdd52dd4545a0"
 		)
-		let base = keyBytes(schedule.nonceBase!)
+		let base = schedule.nonceBase!
 		#expect(
 			Hex.encode(
 				try Segment.derivedNonce(

@@ -1,5 +1,6 @@
 import Crypto
 import Foundation
+import SecretBytes
 
 @testable import RAAE
 
@@ -8,6 +9,12 @@ func keyBytes(_ key: SymmetricKey) -> [UInt8] { key.withUnsafeBytes { Array($0) 
 
 /// Hex of a `SymmetricKey`'s bytes.
 func keyHex(_ key: SymmetricKey) -> String { Hex.encode(keyBytes(key)) }
+
+/// Read the raw bytes of a zeroizing `SecretBytes` (test-only).
+func keyBytes(_ secret: SecretBytes) -> [UInt8] { secret.withUnsafeBytes { Array($0) } }
+
+/// Hex of a `SecretBytes`'s bytes.
+func keyHex(_ secret: SecretBytes) -> String { Hex.encode(keyBytes(secret)) }
 
 enum Hex {
 	/// Decode a hex string to bytes. Traps on malformed input (test-only).
