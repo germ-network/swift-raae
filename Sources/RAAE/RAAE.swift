@@ -13,7 +13,4 @@
 public enum RAAE {
 	/// The draft revision this package targets. See `Spec/SOURCE.md`.
 	public static let targetedDraft = "draft-sullivan-cfrg-raae-02 (2026-07-13)"
-
-	/// Package version.
-	public static let version = "0.0.1"
 }
