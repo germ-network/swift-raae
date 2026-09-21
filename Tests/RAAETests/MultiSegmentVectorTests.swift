@@ -1,4 +1,6 @@
+import Crypto
 import Foundation
+import SecretBytes
 import Testing
 
 @testable import RAAE
@@ -71,7 +73,7 @@ struct MultiSegmentVectorTests {
 struct DerivedNonceTests {
 	/// `nonce(i) = nonce_base XOR ((i<<1)|is_final)` in the low octets.
 	@Test func derivedNonceFormula() throws {
-		let base = [UInt8](repeating: 0, count: 12)
+		let base = try SecretBytes(bytes: [UInt8](repeating: 0, count: 12))
 		// i=0, is_final=1 → value 1 → last octet 0x01.
 		let n0 = try Segment.derivedNonce(
 			nonceBase: base, position: .init(index: 0, isFinal: true))
@@ -81,7 +83,7 @@ struct DerivedNonceTests {
 			nonceBase: base, position: .init(index: 1, isFinal: false))
 		#expect(n1 == [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2])
 		// XOR into a non-zero base flips only the low octets.
-		let base2 = [UInt8](repeating: 0xFF, count: 12)
+		let base2 = try SecretBytes(bytes: [UInt8](repeating: 0xFF, count: 12))
 		let n2 = try Segment.derivedNonce(
 			nonceBase: base2, position: .init(index: 0, isFinal: true))
 		#expect(Array(n2.prefix(11)) == [UInt8](repeating: 0xFF, count: 11))
@@ -91,7 +93,8 @@ struct DerivedNonceTests {
 	@Test func nonceTooShortThrows() {
 		#expect(throws: Segment.SegmentError.self) {
 			try Segment.derivedNonce(
-				nonceBase: [0, 0, 0, 0], position: .init(index: 0, isFinal: true))
+				nonceBase: try SecretBytes(bytes: [0, 0, 0, 0]),
+				position: .init(index: 0, isFinal: true))
 		}
 	}
 
@@ -104,7 +107,8 @@ struct DerivedNonceTests {
 		info.aeadID = 0x001F  // AES-256-GCM-SIV (MRAE)
 		let schedule = try PayloadSchedule(
 			protocolID: ProtocolID.mutable,
-			cek: [UInt8](repeating: 0xAA, count: 32), payloadInfo: info)
+			cek: SymmetricKey(data: [UInt8](repeating: 0xAA, count: 32)),
+			payloadInfo: info)
 		#expect(schedule.nonceBase != nil)
 
 		for (index, isFinal) in [(UInt64(0), false), (UInt64(1), true), (UInt64(5), false)]

@@ -1,3 +1,4 @@
+import Crypto
 import Foundation
 import RAAE
 
@@ -21,7 +22,8 @@ import RAAE
 /// total byte count determines the segmentation — see ``SEALLinearGeometry``.
 ///
 /// Interfaces here take and return `Foundation.Data`; the engine and core work in
-/// `[UInt8]` and conversion happens at this boundary.
+/// `[UInt8]` and conversion happens at this boundary. The CEK is the exception on both
+/// sides: it stays a zeroizing `SymmetricKey` end to end.
 extension SealedObjectHeader {
 	/// The serialized header block, `salt || commitment` — the fixed-width prefix every
 	/// §4.11 layout shares.
@@ -63,10 +65,10 @@ extension SEALConfiguration {
 	/// parses it, then verifies the commitment (§4.6) before returning. A wrong CEK,
 	/// wrong parameters, wrong `G`, or a corrupted header all fail here.
 	public func startDecryption(
-		cek: Data, headerBlock: Data, globalAssociatedData: Data = Data()
+		cek: SymmetricKey, headerBlock: Data, globalAssociatedData: Data = Data()
 	) throws -> SEALReader {
 		try startDecryption(
-			cek: Array(cek), header: parseHeader(headerBlock),
+			cek: cek, header: parseHeader(headerBlock),
 			globalAssociatedData: Array(globalAssociatedData))
 	}
 }
@@ -271,11 +273,11 @@ extension SEALConfiguration {
 	/// in one step, for a partial download: the commitment is verified once and the
 	/// reader opens whichever blocks did arrive.
 	public func startDecryption(
-		cek: Data, objectPrefix: Data, globalAssociatedData: Data = Data()
+		cek: SymmetricKey, objectPrefix: Data, globalAssociatedData: Data = Data()
 	) throws -> (reader: SEALReader, prefix: SEALLinearPrefix) {
 		let prefix = try parsePrefix(objectPrefix)
 		let reader = try startDecryption(
-			cek: Array(cek), header: prefix.header,
+			cek: cek, header: prefix.header,
 			globalAssociatedData: Array(globalAssociatedData))
 		return (reader, prefix)
 	}
@@ -317,7 +319,7 @@ extension SEALConfiguration {
 	/// - Parameter globalAssociatedData: the raAE `G` (§4.6) — bound into the
 	///   commitment, never stored, re-supplied on open.
 	public func seal(
-		_ plaintext: Data, cek: Data, globalAssociatedData: Data = Data()
+		_ plaintext: Data, cek: SymmetricKey, globalAssociatedData: Data = Data()
 	) throws -> Data {
 		try seal(
 			plaintext, cek: cek, globalAssociatedData: globalAssociatedData, salt: nil)
@@ -325,11 +327,11 @@ extension SEALConfiguration {
 
 	/// Vector seam: the same object under a pinned salt, so a KAT can compare bytes.
 	func seal(
-		_ plaintext: Data, cek: Data, globalAssociatedData: Data, salt: [UInt8]?
+		_ plaintext: Data, cek: SymmetricKey, globalAssociatedData: Data, salt: [UInt8]?
 	) throws -> Data {
 		try requireImmutableProfile()
 		let writer = try SEALWriter(
-			configuration: self, cek: Array(cek),
+			configuration: self, cek: cek,
 			globalAssociatedData: Array(globalAssociatedData), advantageLog2: 32,
 			salt: salt)
 		let bytes = Array(plaintext)
@@ -358,7 +360,7 @@ extension SEALConfiguration {
 	/// instead, use ``linearGeometry(objectByteCount:)`` with
 	/// ``SEALReader/decrypt(block:at:associatedData:)``.
 	public func open(
-		_ storedObject: Data, cek: Data, globalAssociatedData: Data = Data()
+		_ storedObject: Data, cek: SymmetricKey, globalAssociatedData: Data = Data()
 	) throws -> Data {
 		let geometry = try linearGeometry(objectByteCount: storedObject.count)
 		let reader = try startDecryption(

@@ -1,3 +1,4 @@
+import Crypto
 import RAAE
 import Testing
 
@@ -16,7 +17,8 @@ struct ProfileTupleTests {
 			nonceMode: nonceMode, epochLength: 1,
 			salt: [UInt8](repeating: 0x04, count: 32))
 		return try PayloadSchedule(
-			protocolID: protocolID, cek: [UInt8](repeating: 0xAA, count: 32),
+			protocolID: protocolID,
+			cek: SymmetricKey(data: [UInt8](repeating: 0xAA, count: 32)),
 			payloadInfo: info)
 	}
 

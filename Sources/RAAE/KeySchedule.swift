@@ -1,16 +1,17 @@
 import Crypto
 import Foundation
+import SecretBytes
 
 /// The payload schedule (draft §4.5.1–4.5.2): the keys derived deterministically from
 /// the CEK and `payload_info`. Holds the resolved suite backends for the message.
 ///
 /// The derived **secret** keys (`payloadKey`, `snapKey`, `nonceBase`, and per-segment
 /// keys) are deliberately *not* on the public surface — the draft (§5.8) treats them as
-/// never exposed through any public API — and are held as zeroizing `SymmetricKey`
-/// values so they are scrubbed when the *last reference* to the key is released (so on a
-/// `startDecrypt` mismatch, dropping the rejected schedule satisfies the §4.6 SHOULD to
-/// zeroize derived key material — callers must not retain it). The `commitment` is a
-/// public authenticator, not a secret.
+/// never exposed through any public API — and are held as zeroizing `SymmetricKey` /
+/// `SecretBytes` values so they are scrubbed when the *last reference* to the key is
+/// released (so on a `startDecrypt` mismatch, dropping the rejected schedule satisfies
+/// the §4.6 SHOULD to zeroize derived key material — callers must not retain it). The
+/// `commitment` is a public authenticator, not a secret.
 public struct PayloadSchedule {
 	public let protocolID: [UInt8]
 	public let payloadInfo: PayloadInfo
@@ -25,8 +26,10 @@ public struct PayloadSchedule {
 	let payloadKey: SymmetricKey
 	/// Snapshot authenticator key (`acc_key`). Internal; never vended raw (§5.8).
 	let snapKey: SymmetricKey
-	/// Base nonce for derived mode; `nil` in random mode. Internal (§5.8).
-	let nonceBase: SymmetricKey?
+	/// Base nonce for derived mode; `nil` in random mode. Internal (§5.8). The draft
+	/// treats this as a *nonce*, not a key — it is never passed to a key-taking API —
+	/// so it is held as zeroizing `SecretBytes` rather than `SymmetricKey`.
+	let nonceBase: SecretBytes?
 
 	/// Whether this schedule's protocol ID selects the write-once profile
 	/// (`SEAL-RO-v1`, §4.10.2): every segment is encrypted exactly once and never
@@ -117,14 +120,14 @@ public struct PayloadSchedule {
 	///   adversaries; see ``minCommitmentLength``).
 	public init(
 		protocolID: [UInt8],
-		cek: [UInt8],
+		cek: SymmetricKey,
 		payloadInfo: PayloadInfo,
 		globalAssociatedData: [UInt8] = [],
 		commitmentLength: Int? = nil
 	) throws {
 		try payloadInfo.validate()
-		guard cek.count == Self.cekLength else {
-			throw ScheduleError.invalidCEKLength(cek.count)
+		guard cek.bitCount == Self.cekLength * 8 else {
+			throw ScheduleError.invalidCEKLength(cek.bitCount / 8)
 		}
 		guard let aead = SuiteRegistry.aead(id: payloadInfo.aeadID) else {
 			throw ScheduleError.unsupportedAEAD(payloadInfo.aeadID)
@@ -189,20 +192,22 @@ public struct PayloadSchedule {
 		// as one framed element after payload_info (empty G is still an element).
 		self.commitment = kdf.derive(
 			protocolID: protocolID, label: Label.commit,
-			ikm: [cek], info: info + [globalAssociatedData], outputLength: commitLen)
+			ikm: cek, info: info + [globalAssociatedData], outputLength: commitLen)
 		// Secret outputs → deriveKey(...) -> SymmetricKey (zeroizing).
 		self.payloadKey = kdf.deriveKey(
 			protocolID: protocolID, label: Label.payloadKey,
-			ikm: [cek], info: info, outputLength: aead.keyLength)
+			ikm: cek, info: info, outputLength: aead.keyLength)
 		self.snapKey = kdf.deriveKey(
 			protocolID: protocolID, label: Label.accKey,
-			ikm: [cek], info: info, outputLength: kdf.outputSize)
-		self.nonceBase =
-			payloadInfo.nonceMode == .derived
-			? kdf.deriveKey(
-				protocolID: protocolID, label: Label.nonceBase,
-				ikm: [cek], info: info, outputLength: aead.nonceLength)
-			: nil
+			ikm: cek, info: info, outputLength: kdf.outputSize)
+		if payloadInfo.nonceMode == .derived {
+			self.nonceBase = try SecretBytes(
+				bytes: kdf.deriveKey(
+					protocolID: protocolID, label: Label.nonceBase,
+					ikm: cek, info: info, outputLength: aead.nonceLength))
+		} else {
+			self.nonceBase = nil
+		}
 	}
 
 	/// Verify a published commitment against this schedule's, in constant time (§4.6).
@@ -245,7 +250,7 @@ public struct PayloadSchedule {
 	///   ``CommitmentError/commitmentMismatch``, exactly like a wrong CEK.
 	public static func startDecrypt(
 		protocolID: [UInt8],
-		cek: [UInt8],
+		cek: SymmetricKey,
 		payloadInfo: PayloadInfo,
 		publishedCommitment: [UInt8],
 		expectedCommitmentLength: Int? = nil,
@@ -267,11 +272,9 @@ public struct PayloadSchedule {
 	/// Returns a zeroizing `SymmetricKey`; internal, never vended raw (§5.8).
 	func segmentKey(index: UInt64) -> SymmetricKey {
 		let epochIndex = index >> payloadInfo.epochLength
-		// payload_key is the (secret) ikm; the framing transiently materializes it.
-		let payloadKeyBytes = payloadKey.withUnsafeBytes { Array($0) }
 		return kdf.deriveKey(
 			protocolID: protocolID, label: Label.epochKey,
-			ikm: [payloadKeyBytes], info: [Bytes.uint64(epochIndex)],
+			ikm: payloadKey, info: [Bytes.uint64(epochIndex)],
 			outputLength: aead.keyLength)
 	}
 }

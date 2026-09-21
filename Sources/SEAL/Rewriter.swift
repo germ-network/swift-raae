@@ -1,4 +1,6 @@
+import Crypto
 import RAAE
+import SecretBytes
 
 extension SEALConfiguration {
 	/// Resume a sealed `SEAL-RW-v1` object for in-place rewriting (raAE `RewriteSeg`,
@@ -22,7 +24,7 @@ extension SEALConfiguration {
 	///   "an encryptor MUST NOT rewrite a segment once it has been written"
 	///   (§4.10.2).
 	public func resumeWriting(
-		cek: [UInt8], header: SealedObjectHeader, snapshot: [UInt8],
+		cek: SymmetricKey, header: SealedObjectHeader, snapshot: [UInt8],
 		segments: [SealedSegment], usageState: SEALUsageState,
 		globalAssociatedData: [UInt8] = []
 	) throws -> SEALRewriter {
@@ -35,7 +37,7 @@ extension SEALConfiguration {
 	/// Test seam: a rewriter with a non-default §5.9 collision-advantage target
 	/// (larger values shrink the budgets so tests can reach them).
 	static func resumeWritingForTesting(
-		configuration: SEALConfiguration, cek: [UInt8], header: SealedObjectHeader,
+		configuration: SEALConfiguration, cek: SymmetricKey, header: SealedObjectHeader,
 		snapshot: [UInt8], segments: [SealedSegment], usageState: SEALUsageState,
 		advantageLog2: Int
 	) throws -> SEALRewriter {
@@ -62,7 +64,7 @@ public final class SEALRewriter {
 	private let hash: MaskedMultisetHash
 	private let budget: UsageBudget
 	/// Recovered by unmasking the verified snapshot; never exposed.
-	private var accumulator: [UInt8]
+	private var accumulator: SecretBytes
 	private let segmentCount: UInt64
 	/// index → current tag: `rewrite` only replaces a segment it can match here.
 	private var currentTags: [UInt64: [UInt8]]
@@ -73,7 +75,7 @@ public final class SEALRewriter {
 	public var usageState: SEALUsageState { state }
 
 	init(
-		configuration: SEALConfiguration, cek: [UInt8], header: SealedObjectHeader,
+		configuration: SEALConfiguration, cek: SymmetricKey, header: SealedObjectHeader,
 		snapshot: [UInt8], segments: [SealedSegment], usageState: SEALUsageState,
 		globalAssociatedData: [UInt8], advantageLog2: Int
 	) throws {
@@ -94,7 +96,7 @@ public final class SEALRewriter {
 		let wrapped = Array(snapshot.prefix(hash.outputSize))
 		let snapshotTag = Array(snapshot.suffix(hash.outputSize))
 		let mask = hash.mask(segmentCount: nSeg, snapshotTag: snapshotTag)
-		self.accumulator = xor(wrapped, mask)
+		self.accumulator = try SecretBytes(bytes: xor(wrapped, mask))
 
 		self.configuration = configuration
 		self.header = header
@@ -159,14 +161,15 @@ public final class SEALRewriter {
 		// Commit only after the encryption succeeded: remove(i, old) / add(i, new),
 		// then re-derive the published snapshot; n_seg is unchanged.
 		let newTag = replacement.tag(length: schedule.aead.tagLength)
-		accumulator = hash.rewrittenAccumulator(
-			accumulator: accumulator, index: position.index, oldTag: oldTag,
-			newTag: newTag)
+		accumulator = xorIntoSecret(
+			accumulator,
+			hash.rewriteDelta(index: position.index, oldTag: oldTag, newTag: newTag))
 		currentTags[position.index] = newTag
 		state.epochCounts[epoch] = nextEpochCount
 		state.segmentWrites[position.index] = nextSegmentCount
 		let snapshot = hash.snapshotValue(
-			segmentCount: segmentCount, accumulator: accumulator)
+			segmentCount: segmentCount,
+			accumulator: accumulator.withUnsafeBytes { Array($0) })
 		return (replacement, snapshot)
 	}
 }

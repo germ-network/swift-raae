@@ -1,3 +1,4 @@
+import Crypto
 import Testing
 
 @testable import RAAE
@@ -12,7 +13,7 @@ struct GlobalAADCommitmentTests {
 		aeadID: 0x0002, segmentMax: 16384, kdfID: 0x0001, snapID: 0x0001,
 		nonceMode: .random, epochLength: 1,
 		salt: [UInt8](repeating: 0x04, count: 32))
-	let cek = [UInt8](repeating: 0xAA, count: 32)
+	let cek = SymmetricKey(data: [UInt8](repeating: 0xAA, count: 32))
 
 	/// F.2 "G default (empty)": equals the F.1 commitment.
 	@Test func emptyGEqualsF1Commitment() throws {

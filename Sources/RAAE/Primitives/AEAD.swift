@@ -41,7 +41,7 @@ extension AEAD {
 	public var isMRAE: Bool { false }
 
 	/// Validate key/nonce sizes against the algorithm parameters.
-	fileprivate func validate(key: SymmetricKey, nonce: [UInt8]) throws {
+	func validate(key: SymmetricKey, nonce: [UInt8]) throws {
 		guard key.bitCount == keyLength * 8 else {
 			throw AEADError.invalidParameters(
 				"key must be \(keyLength) octets, got \(key.bitCount / 8)")

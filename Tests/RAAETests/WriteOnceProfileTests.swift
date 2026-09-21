@@ -1,3 +1,4 @@
+import Crypto
 import Testing
 
 @testable import RAAE
@@ -18,7 +19,8 @@ struct WriteOnceProfileTests {
 			nonceMode: .derived, epochLength: epochLength,
 			salt: [UInt8](repeating: 0x04, count: 32))
 		return try PayloadSchedule(
-			protocolID: protocolID, cek: [UInt8](repeating: 0xAA, count: 32),
+			protocolID: protocolID,
+			cek: SymmetricKey(data: [UInt8](repeating: 0xAA, count: 32)),
 			payloadInfo: info)
 	}
 
@@ -100,7 +102,7 @@ struct WriteOnceProfileTests {
 			keyHex(schedule.segmentKey(index: 1))
 				== "19399e1302ed3dc9e3bfa4ac952b6fba799c2a5830fb5ee34afbdd52dd4545a0"
 		)
-		let base = keyBytes(schedule.nonceBase!)
+		let base = schedule.nonceBase!
 		#expect(
 			Hex.encode(
 				try Segment.derivedNonce(

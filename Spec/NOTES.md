@@ -335,12 +335,17 @@ vector's fixed nonce to pin the ciphertext in both directions.
   multi-key / invisible-salamander-style adversaries. The default full-`Nh`
   commitment is the recommendation; the floor exists for interop, not as a target.
 - **Derived keys are not on the public API** (§5.8): `payloadKey`/`snapKey`/`nonceBase`
-  and per-segment keys are internal and held as zeroizing `SymmetricKey` (scrubbed when
-  the last reference is released). `AEAD.seal/open` take `SymmetricKey`. Honest limit: each
-  derivation transiently materializes secret ikm in `[UInt8]` (the framing `extract_input`,
-  and `payload_key`/`snap_key`/`nonce_base` when fed as ikm), and the caller-owned CEK plus
-  any register/stack copies are not scrubbable — we bound the *long-lived* secret to one
-  zeroizing buffer, not zero copies.
+  and per-segment keys are internal and held in zeroizing storage — `SymmetricKey` for the
+  keys (scrubbed when the last reference is released), `SecretBytes` for `nonceBase`, which
+  the draft treats as a *nonce* rather than a key: it is never fed to a KDF as ikm.
+  `AEAD.seal/open` take `SymmetricKey`. Honest limit: the framing `extract_input` (which
+  carries the secret ikm) is built in zeroizing storage only on platforms whose CryptoKit
+  exposes swift-crypto 5.0's span surface (macOS 27 / iOS 27 and newer); below that it is a
+  transient `[UInt8]`. `Segment.derivedNonce` likewise returns the derived nonce as a
+  transient `[UInt8]` — a masked copy of `nonce_base`, low 8 octets XORed and the rest
+  copied verbatim, materialized because the AEAD takes its nonce as bytes. The
+  caller-owned CEK plus any register/stack copies are not scrubbable — we bound the
+  *long-lived* secret to zeroizing buffers, not zero copies.
 - **Usage budgets (§5.9)** are exposed via `PayloadSchedule.usageBudget(...)` (log2
   bounds) and enforced with hard caps (no warn mode) by the SEAL writer, which owns
   nonce generation — the §5.9.7.1 budget assumes uniformly random nonces — and

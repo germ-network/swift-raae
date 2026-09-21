@@ -1,3 +1,4 @@
+import Crypto
 import Foundation
 import RAAE
 import Testing
@@ -7,7 +8,7 @@ import Testing
 struct CommitmentVerifyTests {
 	/// F.1 inputs (public-surface): CEK, payload_info, published commitment, segment 0.
 	func e1() throws -> (
-		cek: [UInt8], info: PayloadInfo, commitment: [UInt8], seg: [String: Any]
+		cek: SymmetricKey, info: PayloadInfo, commitment: [UInt8], seg: [String: Any]
 	) {
 		let v = try Vectors.load("F1")
 		let pi = v["payload_info"] as! [String: Any]
@@ -23,7 +24,7 @@ struct CommitmentVerifyTests {
 		let commitment = Hex.decode(
 			(v["schedule"] as! [String: Any])["commitment_hex"] as! String)
 		return (
-			Hex.decode(v["cek_hex"] as! String), info, commitment,
+			SymmetricKey(data: Hex.decode(v["cek_hex"] as! String)), info, commitment,
 			v["segment_0"] as! [String: Any]
 		)
 	}
@@ -46,11 +47,13 @@ struct CommitmentVerifyTests {
 	}
 
 	@Test func startDecryptRejectsWrongCEK() throws {
-		var (cek, info, commitment, _) = try e1()
-		cek[0] ^= 0x01
+		let (cek, info, commitment, _) = try e1()
+		var wrongBytes = cek.withUnsafeBytes { Array($0) }
+		wrongBytes[0] ^= 0x01
+		let wrongCEK = SymmetricKey(data: wrongBytes)
 		#expect(throws: PayloadSchedule.CommitmentError.commitmentMismatch) {
 			_ = try PayloadSchedule.startDecrypt(
-				protocolID: ProtocolID.mutable, cek: cek, payloadInfo: info,
+				protocolID: ProtocolID.mutable, cek: wrongCEK, payloadInfo: info,
 				publishedCommitment: commitment)
 		}
 	}

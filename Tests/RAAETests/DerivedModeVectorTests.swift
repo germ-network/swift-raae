@@ -34,7 +34,7 @@ struct DerivedModeVectorTests {
 				keyHex(schedule.segmentKey(index: index)) == seg[
 					"segment_key_hex"] as! String)
 			let nonce = try Segment.derivedNonce(
-				nonceBase: keyBytes(schedule.nonceBase!), position: pos)
+				nonceBase: schedule.nonceBase!, position: pos)
 			#expect(Hex.encode(nonce) == seg["nonce_hex"] as! String)
 		}
 	}

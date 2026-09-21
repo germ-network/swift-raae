@@ -1,6 +1,6 @@
 import Crypto
+import CryptoExtras
 import Foundation
-import _CryptoExtras
 
 /// AES-256-GCM-SIV, `aead_id = 0x001F` (Table 7, IANA `AEAD_AES_256_GCM_SIV`).
 /// `Nk=32, Nn=12, Nt=16`.
@@ -8,7 +8,7 @@ import _CryptoExtras
 /// This is the MRAE (nonce-misuse-resistant) suite SEAL uses for derived nonce mode:
 /// a rewrite reuses the segment's fixed nonce, and GCM-SIV's synthetic IV bounds the
 /// damage of that reuse to leaking equality of identical plaintext/context pairs.
-/// Backed by swift-crypto's `_CryptoExtras` (BoringSSL).
+/// Backed by swift-crypto's `CryptoExtras` (BoringSSL).
 struct AES256GCMSIV: AEAD {
 	let id: UInt16 = 0x001F
 	let keyLength = 32

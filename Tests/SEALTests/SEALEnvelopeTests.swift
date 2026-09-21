@@ -1,3 +1,4 @@
+import Crypto
 import Foundation
 import RAAE
 import Testing
@@ -48,7 +49,7 @@ struct SEALEnvelopeTests {
 		#expect(parsed.configuration.profile == .readOnly)
 		// Parsing a whole envelope yields the same value as parsing the prefix alone.
 		let object = try simple.sealEnvelope(
-			payload(10), cek: Data(SEALConfiguration.generateCEK()))
+			payload(10), cek: SEALConfiguration.generateCEK())
 		#expect(try SEALEnvelope.parse(object) == parsed)
 	}
 
@@ -56,7 +57,7 @@ struct SEALEnvelopeTests {
 	@Test func wrappedObjectIsTheUnmodifiedF23Object() throws {
 		let v = try Vectors.load("F23")
 		let stored = Data(Hex.decode(v["stored_object_hex"] as! String))
-		let cek = Data(Hex.decode(v["cek_hex"] as! String))
+		let cek = SymmetricKey(data: Hex.decode(v["cek_hex"] as! String))
 		let salt = Hex.decode((v["payload_info"] as! [String: Any])["salt_hex"] as! String)
 
 		let plaintext = try SEALEnvelope.open(
@@ -85,7 +86,7 @@ struct SEALEnvelopeTests {
 		let config = try SEALConfiguration(
 			profile: .readOnly, aeadID: aeadID, kdfID: kdfID, segmentMax: 16384,
 			epochLength: 32)
-		let cek = Data(SEALConfiguration.generateCEK())
+		let cek = SEALConfiguration.generateCEK()
 		let original = payload(20000)  // two segments
 		let envelope = try config.sealEnvelope(original, cek: cek)
 
@@ -98,7 +99,7 @@ struct SEALEnvelopeTests {
 	}
 
 	@Test func globalAssociatedDataStillBinds() throws {
-		let cek = Data(SEALConfiguration.generateCEK())
+		let cek = SEALConfiguration.generateCEK()
 		let g = Data("attachment-42".utf8)
 		let envelope = try small.sealEnvelope(
 			payload(100), cek: cek, globalAssociatedData: g)
@@ -126,7 +127,7 @@ struct SEALEnvelopeTests {
 	func alteringAnyPrefixFieldFailsBeforeDecryption(
 		_ range: Range<Int>, _ bytes: [UInt8], _ label: String
 	) throws {
-		let cek = Data(SEALConfiguration.generateCEK())
+		let cek = SEALConfiguration.generateCEK()
 		let original = payload(200)
 		let envelope = try simple.sealEnvelope(original, cek: cek)
 		#expect(try SEALEnvelope.open(envelope, cek: cek) == original)
@@ -142,14 +143,14 @@ struct SEALEnvelopeTests {
 
 	@Test func aBareObjectIsNotMistakenForAnEnvelope() throws {
 		let bare = try simple.seal(
-			payload(10), cek: Data(SEALConfiguration.generateCEK()))
+			payload(10), cek: SEALConfiguration.generateCEK())
 		#expect(throws: SEALError.invalidEnvelopeMagic) {
 			_ = try SEALEnvelope.parse(bare)
 		}
 	}
 
 	@Test func unsupportedPrefixValuesAreNamedNotInferred() throws {
-		let cek = Data(SEALConfiguration.generateCEK())
+		let cek = SEALConfiguration.generateCEK()
 		let envelope = try simple.sealEnvelope(payload(10), cek: cek)
 
 		#expect(throws: SEALError.invalidEnvelopeMagic) {
@@ -188,15 +189,18 @@ struct SEALEnvelopeTests {
 		// The bare container accepts it...
 		#expect(
 			try tooSmall.open(
-				tooSmall.seal(payload(10), cek: Data(repeating: 7, count: 32)),
-				cek: Data(repeating: 7, count: 32)) == payload(10))
+				tooSmall.seal(
+					payload(10),
+					cek: SymmetricKey(data: Data(repeating: 7, count: 32))),
+				cek: SymmetricKey(data: Data(repeating: 7, count: 32)))
+				== payload(10))
 		// ...the envelope refuses to emit it, matching what parse would refuse to read.
 		#expect(throws: SEALError.unsupportedEnvelopeSegmentMax(4096)) {
 			_ = try tooSmall.envelopePrefix
 		}
 		#expect(throws: SEALError.unsupportedEnvelopeSegmentMax(4096)) {
 			_ = try tooSmall.sealEnvelope(
-				payload(10), cek: Data(SEALConfiguration.generateCEK()))
+				payload(10), cek: SEALConfiguration.generateCEK())
 		}
 
 		let rw = try SEALConfiguration(
@@ -209,7 +213,7 @@ struct SEALEnvelopeTests {
 	// MARK: Geometry
 
 	@Test func geometryRangesAddressTheEnvelope() throws {
-		let cek = Data(SEALConfiguration.generateCEK())
+		let cek = SEALConfiguration.generateCEK()
 		let original = payload(40960)  // 2 full segments + a short one
 		let envelope = try small.sealEnvelope(original, cek: cek)
 		let parsed = try SEALEnvelope.parse(envelope)
@@ -264,7 +268,7 @@ struct SEALEnvelopeTests {
 	// MARK: One-shot reader
 
 	@Test func startDecryptionResolvesTheSuiteAndVerifies() throws {
-		let cek = Data(SEALConfiguration.generateCEK())
+		let cek = SEALConfiguration.generateCEK()
 		let envelope = try small.sealEnvelope(payload(100), cek: cek)
 		// The head alone — prefix plus header block — is enough to build a reader.
 		let head = envelope.prefix(15 + 64)
@@ -282,7 +286,7 @@ struct SEALEnvelopeTests {
 
 		#expect(throws: PayloadSchedule.CommitmentError.commitmentMismatch) {
 			_ = try SEALEnvelope.startDecryption(
-				cek: Data(SEALConfiguration.generateCEK()), envelopeBytes: head)
+				cek: SEALConfiguration.generateCEK(), envelopeBytes: head)
 		}
 	}
 
@@ -291,7 +295,7 @@ struct SEALEnvelopeTests {
 	// MARK: Partial fetches
 
 	@Test func prefixResumeOffsetAddressesTheBlob() throws {
-		let cek = Data(SEALConfiguration.generateCEK())
+		let cek = SEALConfiguration.generateCEK()
 		let envelope = try small.sealEnvelope(payload(40960), cek: cek)  // 3 segments
 		let parsed = try SEALEnvelope.parse(envelope)
 		let base = parsed.objectOffset
@@ -332,7 +336,7 @@ struct SEALEnvelopeTests {
 	}
 
 	@Test func interruptedEnvelopeFetchResumesAndCompletes() throws {
-		let cek = Data(SEALConfiguration.generateCEK())
+		let cek = SEALConfiguration.generateCEK()
 		let original = payload(40960)
 		let envelope = try small.sealEnvelope(original, cek: cek)
 		let stride = small.segmentBlockByteCount
@@ -372,7 +376,7 @@ struct SEALEnvelopeTests {
 	}
 
 	@Test func acceptsNonZeroBasedSlices() throws {
-		let cek = Data(SEALConfiguration.generateCEK())
+		let cek = SEALConfiguration.generateCEK()
 		let original = payload(100)
 		let envelope = try small.sealEnvelope(original, cek: cek)
 
